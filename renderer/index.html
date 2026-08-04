@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<title>9jacut</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-nine">9ja</span>cut</div>
+    <div class="mode-tabs">
+      <button id="tabClipEditor" class="mode-tab active">Clip Editor</button>
+      <button id="tabPromoVideo" class="mode-tab">Promo Video</button>
+    </div>
+    <div class="actions">
+      <button id="btnUndo" class="btn" disabled title="Undo last change">↶ Undo</button>
+      <button id="btnOpenVideo" class="btn">Open Video</button>
+      <span id="fileName" class="filename">No video loaded</span>
+      <button id="btnSaveProject" class="btn small">Save Project</button>
+      <button id="btnLoadProject" class="btn small">Load Project</button>
+      <span class="spacer"></span>
+      <button id="btnExportFolder" class="btn">Choose Export Folder</button>
+      <span id="exportFolderLabel" class="filename">No folder chosen</span>
+      <button id="btnExportAll" class="btn primary" disabled>Export All Clips</button>
+      <button id="btnThemeToggle" class="btn round theme-toggle" title="Switch theme">🌙</button>
+    </div>
+  </header>
+
+  <div id="clipEditorView">
+  <div id="sourceRow" class="source-row hidden">
+    <span class="source-row-label">Videos:</span>
+    <div id="sourcePills" class="source-pills"></div>
+  </div>
+
+  <main class="layout">
+    <section class="player-pane">
+      <div class="video-stage" id="videoStage">
+        <video id="preview"></video>
+        <div id="dropHint" class="drop-hint">Drag a video here, or click "Open Video"</div>
+        <div id="cropOverlay" class="crop-overlay hidden">
+          <div class="crop-handle a"></div>
+          <div class="crop-handle b"></div>
+        </div>
+        <div id="stickerLayer" class="sticker-layer"></div>
+        <div id="reframeBadge" class="reframe-badge hidden">Reframing: drag the box to choose what stays in shot</div>
+        <div id="stickerBadge" class="reframe-badge hidden">Stickers: drag to position, pick more below</div>
+      </div>
+
+      <div class="transport">
+        <button id="btnPlayPause" class="btn round">▶</button>
+        <input id="seekBar" type="range" min="0" max="1000" value="0" step="1" />
+        <span id="timeLabel" class="time-label">00:00 / 00:00</span>
+      </div>
+
+      <div class="mark-row">
+        <button id="btnMarkIn" class="btn">Mark In</button>
+        <span id="inLabel" class="mark-label">In: --:--</span>
+        <button id="btnMarkOut" class="btn">Mark Out</button>
+        <span id="outLabel" class="mark-label">Out: --:--</span>
+        <span id="durationLabel" class="mark-label">Duration: --:--</span>
+        <button id="btnAddClip" class="btn primary" disabled>+ Add Clip</button>
+      </div>
+
+      <div class="reframe-controls hidden" id="reframeControls">
+        <span>Reframing <strong id="reframeClipName"></strong></span>
+        <button id="btnResetCrop" class="btn small">Center</button>
+        <button id="btnDoneReframe" class="btn small primary">Done</button>
+      </div>
+
+      <div class="sticker-controls hidden" id="stickerControls">
+        <span>Stickers on <strong id="stickerClipName"></strong></span>
+        <div id="stickerPicker" class="sticker-picker"></div>
+        <button id="btnDoneStickers" class="btn small primary">Done</button>
+      </div>
+    </section>
+
+    <aside class="clip-pane">
+      <h2>Clips <span id="clipCount">(0)</span></h2>
+      <div id="clipList" class="clip-list"></div>
+      <p class="hint">Mark In / Mark Out on the video, then Add Clip. Pick an aspect ratio to crop &amp; reframe a clip for posting, or leave it Original. Add your own audio file under a clip to mix it in or replace the original sound.</p>
+    </aside>
+  </main>
+  </div>
+
+  <main class="promo-layout hidden" id="promoView">
+    <section class="promo-form-pane">
+      <h2>Business Info</h2>
+      <label class="promo-field">Business name
+        <input id="promoName" type="text" placeholder="e.g. Candy's Hair Station" />
+      </label>
+      <label class="promo-field">Tagline
+        <input id="promoTagline" type="text" placeholder="e.g. We're OPEN!" />
+      </label>
+      <label class="promo-field">Hours
+        <input id="promoHours" type="text" placeholder="e.g. Mon-Sat 11:00 AM - 6:00 PM" />
+      </label>
+      <label class="promo-field">Address
+        <input id="promoAddress" type="text" placeholder="e.g. 12 Allen Avenue, Ikeja" />
+      </label>
+      <label class="promo-field">Contact
+        <input id="promoContact" type="text" placeholder="e.g. IG: @yourbusiness" />
+      </label>
+
+      <h2>Photos &amp; Videos</h2>
+      <div class="promo-media-actions">
+        <button id="btnAddPromoFromClips" class="btn small" title="Adds every video currently loaded in Clip Editor">+ From Loaded Videos</button>
+        <button id="btnAddPromoFiles" class="btn small">+ From Files</button>
+      </div>
+      <div id="promoMediaList" class="promo-media-list"></div>
+
+      <div class="promo-duration-row">
+        <span>Seconds per photo/clip</span>
+        <input id="promoDuration" type="range" min="1.5" max="6" step="0.5" value="3" />
+        <span id="promoDurationLabel">3.0s</span>
+      </div>
+    </section>
+
+    <section class="promo-gallery-pane">
+      <div class="promo-gallery-header">
+        <h2>Choose a style <span id="promoTemplateCount">(0)</span></h2>
+        <select id="promoLayoutFilter"><option value="">All layouts</option></select>
+      </div>
+      <div id="promoGallery" class="promo-gallery"></div>
+      <div class="promo-export-row">
+        <button id="btnPromoExportFolder" class="btn">Choose Export Folder</button>
+        <span id="promoExportFolderLabel" class="filename">No folder chosen</span>
+        <input id="promoFileName" type="text" class="clip-name promo-filename" placeholder="File name (optional)" />
+        <button id="btnExportPromo" class="btn primary" disabled>Export Promo Video</button>
+      </div>
+      <div class="progress-bar" id="promoProgressBar"><div class="progress-fill"></div></div>
+      <div id="promoStatus" class="clip-status"></div>
+    </section>
+  </main>
+
+  <footer id="statusBar" class="statusbar"></footer>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

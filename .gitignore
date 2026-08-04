@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# electron-builder output (the portable .exe is distributed via GitHub Releases,
+# not committed to the repo)
+dist/
+*.exe
+
+# OS/editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs
+npm-debug.log*

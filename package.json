@@ -1,0 +1,46 @@
+{
+  "name": "9jacut",
+  "version": "1.0.0",
+  "description": "9jacut — manual clip cutter and reframer for stream recordings",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.2.0"
+  },
+  "build": {
+    "appId": "com.ninejacut.app",
+    "productName": "9jacut",
+    "files": [
+      "main.js",
+      "preload.js",
+      "promo-templates.js",
+      "promo-export.js",
+      "renderer/**/*",
+      "assets/**/*",
+      "node_modules/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**/*",
+      "assets/stickers/**/*",
+      "assets/fonts/**/*"
+    ],
+    "win": {
+      "target": [
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "portable": {
+      "artifactName": "9jacut.exe"
+    }
+  }
+}

@@ -1,0 +1,4 @@
+Poppins is licensed under the SIL Open Font License, Version 1.1.
+This license is available at: https://openfontlicense.org
+Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)
+Bundled with 9jacut for use in the Promo Video template feature.
