@@ -280,8 +280,14 @@ for (const transition of ['none', 'fade', 'slideleft', 'circleopen']) {
     } catch (err) {
       failed += 1;
       console.log(`FAIL  ${t.name}\n      ${String(err.message).split('\n').slice(-6).join('\n      ')}`);
+      if (process.env.GITHUB_ACTIONS) {
+        // Show the failure as an annotation on the GitHub run.
+        const msg = String(err.message).split('\n').slice(-8).join(' | ').replace(/%/g, '%25').replace(/\r/g, '').slice(0, 1500);
+        console.log(`::error title=${t.name.replace(/[:,]/g, ' ')}::${msg}`);
+      }
     }
   }
   console.log(`\n${tests.length - failed}/${tests.length} passed. Outputs in ${outDir}`);
+  if (process.env.GITHUB_ACTIONS) console.log(`::notice title=Export tests::${tests.length - failed}/${tests.length} passed with ${ffmpegPath} (text: ${ctx.hasDrawtext})`);
   process.exit(failed ? 1 : 0);
 })();
