@@ -270,234 +270,71 @@ ipcMain.handle('export-promo', async (event, { presetId, layout, themeKey, busin
 
 // ---------- Export ----------
 
-const ASPECT_RATIOS = {
-  vertical: { w: 9, h: 16 },
-  square: { w: 1, h: 1 },
-  portrait: { w: 4, h: 5 },
-};
+const clipExport = require('./clip-export');
+const { safeFileName } = clipExport;
 
-function safeFileName(name) {
-  return name.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'clip';
+async function exportContext(warn) {
+  const ffmpegPath = getFfmpegPath();
+  const support = await clipExport.getFilterSupport(ffmpegPath);
+  return {
+    ffmpegPath,
+    getStickerPath,
+    fontPath: PROMO_FONTS.bold,
+    tmpDir: path.join(app.getPath('temp'), '9jacut-export'),
+    hasDrawtext: support.drawtext,
+    warn,
+  };
 }
 
-function timeToSeconds(t) {
-  return typeof t === 'number' ? t : 0;
-}
-
-function getOutputDims(rw, rh) {
-  const base = 1080;
-  let outW;
-  let outH;
-  if (rw <= rh) {
-    outW = base;
-    outH = Math.round((base * rh) / rw);
-  } else {
-    outH = base;
-    outW = Math.round((base * rw) / rh);
-  }
-  outW = Math.round(outW / 2) * 2;
-  outH = Math.round(outH / 2) * 2;
-  return { outW, outH };
-}
-
-function buildVideoChain(clip) {
-  const start = timeToSeconds(clip.start);
-  const end = timeToSeconds(clip.end);
-  const trim = `trim=start=${start}:end=${end},setpts=PTS-STARTPTS`;
-  if (clip.aspect && clip.aspect !== 'original' && clip.crop) {
-    const { x, y, w, h } = clip.crop;
-    const cropW = Math.max(2, Math.round(w / 2) * 2);
-    const cropH = Math.max(2, Math.round(h / 2) * 2);
-    const cropX = Math.max(0, Math.round(x));
-    const cropY = Math.max(0, Math.round(y));
-    const ratio = clip.aspect === 'custom' ? clip.customRatio : ASPECT_RATIOS[clip.aspect];
-    const rw = (ratio && ratio.w) || 9;
-    const rh = (ratio && ratio.h) || 16;
-    const { outW, outH } = getOutputDims(rw, rh);
-    return `[0:v]${trim},crop=${cropW}:${cropH}:${cropX}:${cropY},scale=${outW}:${outH},setsar=1[vout]`;
-  }
-  return `[0:v]${trim}[vout]`;
-}
-
-function probeHasAudio(sourcePath) {
-  return new Promise((resolve) => {
-    const ff = spawn(getFfmpegPath(), ['-i', sourcePath]);
-    let out = '';
-    ff.stderr.on('data', (d) => { out += d.toString(); });
-    ff.on('error', () => resolve(false));
-    ff.on('close', () => {
-      resolve(/Stream #\d+:\d+[^\n]*Audio:/i.test(out));
-    });
-  });
-}
-
-function buildAudioChain(clip, hasSourceAudio) {
-  const start = timeToSeconds(clip.start);
-  const end = timeToSeconds(clip.end);
-  const duration = Math.max(0.1, end - start);
-  const hasImported = !!(clip.audio && clip.audio.path);
-
-  if (!hasImported) {
-    if (!hasSourceAudio) return { chains: [], outLabel: null };
-    const origTrim = `[0:a]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS[aorig]`;
-    return { chains: [origTrim], outLabel: 'aorig' };
-  }
-
-  const vol = typeof clip.audio.volume === 'number' ? clip.audio.volume : 1;
-  const importedTrim = `[1:a]atrim=start=0:end=${duration},asetpts=PTS-STARTPTS,volume=${vol}[aimp]`;
-
-  if (clip.audio.muteOriginal || !hasSourceAudio) {
-    return { chains: [importedTrim], outLabel: 'aimp' };
-  }
-
-  const origTrim = `[0:a]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS[aorig]`;
-  const mix = '[aorig][aimp]amix=inputs=2:duration=first:dropout_transition=0[amix]';
-  return { chains: [origTrim, importedTrim, mix], outLabel: 'amix' };
-}
-
-function buildStickerChains(clip, videoLabel, stickerInputStartIndex) {
-  const validStickers = (Array.isArray(clip.stickers) ? clip.stickers : []).filter((s) => getStickerPath(s.key));
-  const chains = [];
-  let label = videoLabel;
-  const clipDuration = Math.max(0.1, timeToSeconds(clip.end) - timeToSeconds(clip.start));
-
-  // Stickers are positioned by the user against the original source frame.
-  // If the clip is also cropped/reframed, translate sticker position + size
-  // into the cropped-and-scaled output's coordinate space.
-  let transform = null;
-  if (clip.aspect && clip.aspect !== 'original' && clip.crop) {
-    const ratio = clip.aspect === 'custom' ? clip.customRatio : ASPECT_RATIOS[clip.aspect];
-    const rw = (ratio && ratio.w) || 9;
-    const rh = (ratio && ratio.h) || 16;
-    const { outW, outH } = getOutputDims(rw, rh);
-    transform = {
-      scaleX: outW / clip.crop.w,
-      scaleY: outH / clip.crop.h,
-      offX: clip.crop.x,
-      offY: clip.crop.y,
-    };
-  }
-
-  validStickers.forEach((sticker, i) => {
-    const inputIdx = stickerInputStartIndex + i;
-    let x = sticker.x;
-    let y = sticker.y;
-    let size = sticker.size;
-    if (transform) {
-      x = (sticker.x - transform.offX) * transform.scaleX;
-      y = (sticker.y - transform.offY) * transform.scaleY;
-      size = sticker.size * transform.scaleX;
+ipcMain.handle('export-clips', async (event, { exportFolder, clips, settings = {} }) => {
+  const warnings = new Set();
+  const ctx = await exportContext((msg) => warnings.add(msg));
+  const infoCache = new Map();
+  const sourceInfo = async (sourcePath) => {
+    if (!infoCache.has(sourcePath)) {
+      infoCache.set(sourcePath, await clipExport.probeMedia(ctx.ffmpegPath, sourcePath));
     }
-    size = Math.max(2, Math.round(size));
-    x = Math.round(x);
-    y = Math.round(y);
+    return infoCache.get(sourcePath);
+  };
+  const send = (data) => event.sender.send('export-progress', data);
 
-    const stkLabel = `stk${i}`;
-    chains.push(`[${inputIdx}:v]scale=${size}:${size}[${stkLabel}]`);
-
-    const sStart = Math.max(0, sticker.start != null ? sticker.start : 0);
-    const sEnd = Math.max(sStart + 0.1, sticker.end != null ? sticker.end : clipDuration);
-    const newLabel = `vst${i}`;
-    chains.push(`[${label}][${stkLabel}]overlay=${x}:${y}:enable='between(t,${sStart},${sEnd})'[${newLabel}]`);
-    label = newLabel;
-  });
-
-  return { chains, outLabel: label };
-}
-
-function runFfmpegClip({ sourcePath, outPath, clip, hasSourceAudio }, onProgress) {
-  return new Promise((resolve, reject) => {
-    const start = timeToSeconds(clip.start);
-    const end = timeToSeconds(clip.end);
-    const duration = Math.max(0.1, end - start);
-
-    const validStickers = (Array.isArray(clip.stickers) ? clip.stickers : []).filter((s) => getStickerPath(s.key));
-
-    const inputs = ['-i', sourcePath];
-    let stickerInputStartIndex = 1;
-    if (clip.audio && clip.audio.path) {
-      inputs.push('-i', clip.audio.path);
-      stickerInputStartIndex = 2;
-    }
-    validStickers.forEach((s) => {
-      inputs.push('-loop', '1', '-i', getStickerPath(s.key));
-    });
-
-    const videoChain = buildVideoChain(clip);
-    const { chains: stickerChains, outLabel: videoOutLabel } = buildStickerChains(clip, 'vout', stickerInputStartIndex);
-    const { chains: audioChains, outLabel: audioOutLabel } = buildAudioChain(clip, hasSourceAudio);
-    const filterComplex = [videoChain, ...stickerChains, ...audioChains].join(';');
-
-    const args = [
-      '-y',
-      ...inputs,
-      '-filter_complex', filterComplex,
-      '-map', `[${videoOutLabel}]`,
-    ];
-    if (audioOutLabel) {
-      args.push('-map', `[${audioOutLabel}]`);
-    }
-    args.push(
-      '-c:v', 'libx264',
-      '-preset', 'veryfast',
-      '-crf', '18',
-    );
-    if (audioOutLabel) {
-      args.push('-c:a', 'aac', '-b:a', '192k');
-    }
-    args.push(outPath);
-
-    const ff = spawn(getFfmpegPath(), args);
-    let stderrBuf = '';
-
-    ff.stderr.on('data', (chunk) => {
-      stderrBuf += chunk.toString();
-      const match = stderrBuf.match(/time=(\d+):(\d+):(\d+\.\d+)/g);
-      if (match) {
-        const last = match[match.length - 1];
-        const m = last.match(/time=(\d+):(\d+):(\d+\.\d+)/);
-        if (m) {
-          const elapsed = (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3]);
-          const percent = Math.min(100, Math.round((elapsed / duration) * 100));
-          onProgress(percent);
-        }
-      }
-    });
-
-    ff.on('error', (err) => reject(err));
-    ff.on('close', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`ffmpeg exited with code ${code}\n${stderrBuf.slice(-800)}`));
-    });
-  });
-}
-
-ipcMain.handle('export-clips', async (event, { exportFolder, clips }) => {
-  const results = [];
-  const audioCache = new Map();
-  for (const clip of clips) {
-    const sourcePath = clip.sourcePath;
-    const suffix = clip.aspect && clip.aspect !== 'original' ? `_${clip.aspect}` : '_original';
-    const outName = `${safeFileName(clip.name)}${suffix}.mp4`;
-    const outPath = path.join(exportFolder, outName);
-
-    event.sender.send('export-progress', { id: clip.id, status: 'start', percent: 0 });
+  // One combined video made from every clip, in list order.
+  if (settings.combine && clips.length > 0) {
+    const outPath = path.join(exportFolder, `${safeFileName(settings.combinedName || '9jacut-video')}.mp4`);
+    for (const clip of clips) send({ id: clip.id, status: 'start', percent: 0 });
+    send({ id: 'combined', status: 'start', percent: 0 });
     try {
-      if (!sourcePath) throw new Error('This clip has no source video (try re-adding it).');
-      if (!audioCache.has(sourcePath)) {
-        audioCache.set(sourcePath, await probeHasAudio(sourcePath));
-      }
-      const hasSourceAudio = audioCache.get(sourcePath);
-      await runFfmpegClip(
-        { sourcePath, outPath, clip, hasSourceAudio },
-        (percent) => event.sender.send('export-progress', { id: clip.id, status: 'running', percent })
-      );
-      event.sender.send('export-progress', { id: clip.id, status: 'done', percent: 100, outPath });
+      const missing = clips.find((c) => !c.sourcePath);
+      if (missing) throw new Error(`"${missing.name}" has no source video (try re-adding it).`);
+      await clipExport.exportCombined(ctx, { clips, settings, outPath, sourceInfo }, ({ id, percent, done }) => {
+        send({ id, status: done ? 'done' : 'running', percent });
+      });
+      send({ id: 'combined', status: 'done', percent: 100, outPath });
+      return [{ id: 'combined', ok: true, outPath, warnings: [...warnings] }];
+    } catch (err) {
+      send({ id: 'combined', status: 'error', message: err.message });
+      return [{ id: 'combined', ok: false, error: err.message }];
+    }
+  }
+
+  const results = [];
+  for (const clip of clips) {
+    const suffix = clip.aspect && clip.aspect !== 'original' ? `_${clip.aspect}` : '_original';
+    const outPath = path.join(exportFolder, `${safeFileName(clip.name)}${suffix}.mp4`);
+    send({ id: clip.id, status: 'start', percent: 0 });
+    try {
+      if (!clip.sourcePath) throw new Error('This clip has no source video (try re-adding it).');
+      const info = await sourceInfo(clip.sourcePath);
+      await clipExport.exportClip(ctx, {
+        sourcePath: clip.sourcePath, outPath, clip, hasSourceAudio: info.hasAudio, settings,
+      }, (percent) => send({ id: clip.id, status: 'running', percent }));
+      send({ id: clip.id, status: 'done', percent: 100, outPath });
       results.push({ id: clip.id, ok: true, outPath });
     } catch (err) {
-      event.sender.send('export-progress', { id: clip.id, status: 'error', message: err.message });
+      send({ id: clip.id, status: 'error', message: err.message });
       results.push({ id: clip.id, ok: false, error: err.message });
     }
   }
+  if (warnings.size && results.length) results[0].warnings = [...warnings];
   return results;
 });

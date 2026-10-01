@@ -1,10 +1,11 @@
 {
   "name": "9jacut",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "9jacut — manual clip cutter and reframer for stream recordings",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "test": "node test/export-test.js",
     "dist": "electron-builder --win"
   },
   "author": "",
@@ -24,6 +25,7 @@
       "preload.js",
       "promo-templates.js",
       "promo-export.js",
+      "clip-export.js",
       "renderer/**/*",
       "assets/**/*",
       "node_modules/**/*"

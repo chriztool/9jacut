@@ -13,7 +13,8 @@
       <button id="tabPromoVideo" class="mode-tab">Promo Video</button>
     </div>
     <div class="actions">
-      <button id="btnUndo" class="btn" disabled title="Undo last change">↶ Undo</button>
+      <button id="btnUndo" class="btn" disabled title="Undo last change (Ctrl+Z)">↶ Undo</button>
+      <button id="btnShortcuts" class="btn small" title="Keyboard shortcuts">⌨ Shortcuts</button>
       <button id="btnOpenVideo" class="btn">Open Video</button>
       <span id="fileName" class="filename">No video loaded</span>
       <button id="btnSaveProject" class="btn small">Save Project</button>
@@ -41,6 +42,7 @@
           <div class="crop-handle a"></div>
           <div class="crop-handle b"></div>
         </div>
+        <div id="textLayer" class="text-layer"></div>
         <div id="stickerLayer" class="sticker-layer"></div>
         <div id="reframeBadge" class="reframe-badge hidden">Reframing: drag the box to choose what stays in shot</div>
         <div id="stickerBadge" class="reframe-badge hidden">Stickers: drag to position, pick more below</div>
@@ -53,12 +55,12 @@
       </div>
 
       <div class="mark-row">
-        <button id="btnMarkIn" class="btn">Mark In</button>
+        <button id="btnMarkIn" class="btn" title="Shortcut: I">Mark In</button>
         <span id="inLabel" class="mark-label">In: --:--</span>
-        <button id="btnMarkOut" class="btn">Mark Out</button>
+        <button id="btnMarkOut" class="btn" title="Shortcut: O">Mark Out</button>
         <span id="outLabel" class="mark-label">Out: --:--</span>
         <span id="durationLabel" class="mark-label">Duration: --:--</span>
-        <button id="btnAddClip" class="btn primary" disabled>+ Add Clip</button>
+        <button id="btnAddClip" class="btn primary" disabled title="Shortcut: Enter">+ Add Clip</button>
       </div>
 
       <div class="reframe-controls hidden" id="reframeControls">
@@ -77,7 +79,51 @@
     <aside class="clip-pane">
       <h2>Clips <span id="clipCount">(0)</span></h2>
       <div id="clipList" class="clip-list"></div>
-      <p class="hint">Mark In / Mark Out on the video, then Add Clip. Pick an aspect ratio to crop &amp; reframe a clip for posting, or leave it Original. Add your own audio file under a clip to mix it in or replace the original sound.</p>
+      <div class="export-settings">
+        <h3>Export settings</h3>
+        <div class="setting-row">
+          <label>Resolution
+            <select id="setResolution">
+              <option value="source">Same as video</option>
+              <option value="720">720p (smaller file)</option>
+              <option value="1080">1080p HD</option>
+              <option value="1440">1440p 2K</option>
+              <option value="2160">2160p 4K</option>
+            </select>
+          </label>
+          <label>Quality
+            <select id="setQuality">
+              <option value="high">High</option>
+              <option value="standard">Standard (smaller)</option>
+            </select>
+          </label>
+        </div>
+        <label class="check-row"><input type="checkbox" id="setCombine" /> Join all clips into one video</label>
+        <div id="combineOptions" class="setting-row hidden">
+          <label>Transition
+            <select id="setTransition">
+              <option value="none">None (straight cut)</option>
+              <option value="fade">Crossfade</option>
+              <option value="fadeblack">Fade through black</option>
+              <option value="dissolve">Dissolve</option>
+              <option value="slideleft">Slide left</option>
+              <option value="slideup">Slide up</option>
+              <option value="wipeleft">Wipe</option>
+              <option value="smoothleft">Smooth slide</option>
+              <option value="circleopen">Circle open</option>
+            </select>
+          </label>
+          <label>Length
+            <select id="setTransitionDur">
+              <option value="0.3">0.3s</option>
+              <option value="0.5">0.5s</option>
+              <option value="1">1s</option>
+            </select>
+          </label>
+          <input id="setCombinedName" class="clip-time combined-name" placeholder="Video name" />
+        </div>
+      </div>
+      <p class="hint">Mark In / Mark Out on the video, then Add Clip. Pick an aspect ratio to crop &amp; reframe a clip for posting, or leave it Original. Add your own audio file under a clip to mix it in or replace the original sound. Open <strong>✨ Effects</strong> on a clip for speed, looks, text and fades.</p>
     </aside>
   </main>
   </div>

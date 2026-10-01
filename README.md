@@ -37,6 +37,28 @@ copy of ffmpeg.
   Project** / **Load Project** (writes/reads a `.json` project file covering
   every loaded video, clip, crop, audio, and sticker) so you can pick up a
   project later without redoing anything.
+- **✨ Effects** on any clip (click to expand under the clip):
+  - **Speed** from 0.25x slow-mo to 4x, with the sound kept in sync.
+  - **Looks**: Vivid, Warm, Cool, Naija Gold, Cinematic, Vintage, Faded
+    film and Black & white, plus brightness / contrast / saturation sliders.
+  - **Fade in / fade out** (picture and sound together).
+  - **Text**: as many text lines as you like per clip. Pick the colour,
+    size, position (top / middle / bottom), style (outline, box or plain)
+    and when each one shows. Uses the bundled Poppins font.
+  - **Sound**: video volume slider and a *Reduce background noise* switch.
+    Imported music can **loop to fill the clip**.
+  - The preview player shows the look, speed and text live as you play,
+    so you can check edits before exporting (the look preview is a close
+    approximation; the export is the real thing).
+- **Export settings** (under the clip list): resolution (same as video,
+  720p, 1080p, 2K, 4K), quality (High / Standard), and **Join all clips
+  into one video** with a transition between clips (crossfade, fade through
+  black, dissolve, slide, wipe, circle open…). Clips of a different shape
+  sit on a blurred background instead of black bars.
+- **Keyboard shortcuts**: Space play/pause · I mark in · O mark out ·
+  Enter add clip · ←/→ jump 1s (Shift: 5s) · , / . step one frame ·
+  Home/End · Esc close editing · Ctrl+Z undo · Ctrl+S save project ·
+  Ctrl+O open video. Click **⌨ Shortcuts** to see them in the app.
 - **Promo Video tab** (top of the window): a separate "CapCut-style" business
   promo maker. Fill in your business name/tagline/hours/address/contact, add
   photos and/or video clips (either from files or straight from whatever's
@@ -53,6 +75,16 @@ cd 9jacut
 npm install
 npm start
 ```
+
+## Tests
+
+```
+npm test
+```
+
+Generates small test videos and runs every export feature (speed, looks,
+text, fades, music, joining with transitions) through ffmpeg, checking the
+size and length of each result.
 
 ## Building the single shareable .exe
 
@@ -75,11 +107,11 @@ tooling (Wine) that isn't set up here.
 - The reframe crop is a single position per clip (no animated pan over time).
   Say the word if you'd like the crop to move over the course of a clip and
   I'll add keyframed panning.
-- Imported audio is trimmed to the clip's length (or looped/padded isn't done
-  automatically — if your track is shorter than the clip, it'll just end
-  early). Let me know if you'd like it to loop instead.
-- Keyboard shortcuts (space to play/pause, I/O to mark in/out, Ctrl+Z, etc.)
-  are intentionally not wired up yet — planned for later.
+- Imported audio is trimmed to the clip's length. If the track is shorter
+  than the clip it loops by default; untick *Loop music* to let it end early
+  (the rest of the clip is silent instead).
+- Text and sticker times are measured on the finished clip, so after a
+  speed change they still line up with what you see.
 - Cuts re-encode (rather than stream-copy) so start/end points land exactly
   where you set them, at the cost of being a bit slower than a lossless cut.
 - Stickers are a fixed size for their whole visible window (no grow/shrink
@@ -103,6 +135,10 @@ tooling (Wine) that isn't set up here.
   preload.js        # safe IPC bridge exposed to the renderer as window.nineJaCut
   promo-templates.js # Promo Video: 4 layouts x 13 themes = 52 named presets
   promo-export.js   # Promo Video: builds/runs the ffmpeg filter graph
+  clip-export.js    # Clip Editor export: speed, looks, text, fades, audio, join
+  test/
+    export-test.js  # renders real videos through every export feature (npm test)
+    ui-harness.js   # drives the real app window and takes screenshots
   build/
     icon.ico        # app icon
   assets/
@@ -111,5 +147,5 @@ tooling (Wine) that isn't set up here.
   renderer/
     index.html
     style.css       # dark/light theme via CSS variables
-    renderer.js     # UI logic: timeline, clips, reframe drag, undo, audio, stickers, export, promo
+    renderer.js     # UI logic: timeline, clips, reframe, undo, audio, stickers, effects, shortcuts, export, promo
 ```
