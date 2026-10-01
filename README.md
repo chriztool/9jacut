@@ -5,6 +5,13 @@ them into other aspect ratios for posting online, and mixing in your own
 audio. No AI model, no upload — everything runs locally through a bundled
 copy of ffmpeg.
 
+## Download (Windows)
+
+**[⬇ Download 9jacut.exe](https://github.com/chriztool/9jacut/releases/latest/download/9jacut.exe)**: one file, nothing to install. Double-click it to start.
+
+The first time, Windows may show "Windows protected your PC" because the app
+isn't code-signed yet. Click **More info**, then **Run anyway**.
+
 ## What it does
 
 9jaCut is laid out like a professional editor: **tool tabs on the left**,
@@ -91,6 +98,13 @@ text, captions, zoom, fades, music, voiceover, joining with transitions)
 through ffmpeg, checking the size and length of each result.
 
 ## Building the single shareable .exe
+
+**Automatic:** pushing a version tag (for example `git tag v2.0.1` then
+`git push origin v2.0.1`) makes GitHub build `9jacut.exe` on Windows, run
+the export tests, and attach the .exe to that release. The Actions tab's
+**Run workflow** button does a test build without publishing.
+
+**By hand:**
 
 ```
 npm install

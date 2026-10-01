@@ -7,7 +7,7 @@ set "EXE_NAME=9jacut.exe"
 
 echo ============================================
 echo   Building 9jacut  -  please wait
-echo   (this window will close itself when done)
+echo   (your project files are kept)
 echo ============================================
 echo.
 
@@ -55,18 +55,9 @@ echo.
 echo Build succeeded. Copying %EXE_NAME% to %PARENT_DIR% ...
 copy /y "dist\%EXE_NAME%" "%PARENT_DIR%\%EXE_NAME%" >nul
 
-echo Cleaning up project files, keeping only %EXE_NAME% ...
-cd /d "%PARENT_DIR%"
-
-REM Delete the whole project folder (source, node_modules, this script)
-REM a couple seconds after this window closes, so nothing is left behind
-REM except the finished .exe.
-start "" cmd /c "timeout /t 3 >nul & rmdir /s /q ""%PROJECT_DIR%"""
-
 echo.
-echo Done! %EXE_NAME% is now in:
+echo Done! %EXE_NAME% is in:
 echo   %PARENT_DIR%
-echo That's the only file left - safe to share with friends.
-echo This window will close in 6 seconds.
-timeout /t 6 >nul
+echo Your project files were NOT touched. Share only the .exe.
+pause
 exit

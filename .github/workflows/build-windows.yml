@@ -1,0 +1,55 @@
+# Builds the single-file Windows app (9jacut.exe) on GitHub's Windows
+# machines. Runs the export tests first, so a broken build never ships.
+#
+# - Push a tag like v2.0.0  -> builds and attaches 9jacut.exe to that
+#   GitHub Release (people download it from the Releases page).
+# - "Run workflow" button on the Actions tab -> builds and keeps the .exe
+#   as a downloadable test artifact (no public release).
+name: Build Windows app
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install
+        run: npm install
+
+      - name: Check the speech engine loads on Windows
+        run: node -e "const s=require('sherpa-onnx-node'); if(!s.OfflineRecognizer||!s.Vad) throw new Error('sherpa-onnx did not load'); console.log('sherpa-onnx OK')"
+
+      - name: Export tests (real videos through the bundled Windows ffmpeg)
+        run: npm test
+
+      - name: Build 9jacut.exe
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --win portable --x64 --publish never
+
+      - name: Keep the .exe as a test download
+        uses: actions/upload-artifact@v4
+        with:
+          name: 9jacut-windows
+          path: dist/9jacut.exe
+          retention-days: 14
+
+      - name: Attach to the GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/9jacut.exe
+          generate_release_notes: true
