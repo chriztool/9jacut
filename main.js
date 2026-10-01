@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, clipboard } = require('electron');
 const path = require('path');
 const url = require('url');
 const fs = require('fs');
@@ -46,7 +46,25 @@ function createWindow() {
   });
 
   mainWindow.setMenuBarVisibility(false);
+
+  // Links (the About page's email / website) open in the user's own mail
+  // app or browser, never inside the editor window.
+  mainWindow.webContents.setWindowOpenHandler(({ url: target }) => {
+    openExternalSafe(target);
+    return { action: 'deny' };
+  });
+  mainWindow.webContents.on('will-navigate', (event, target) => {
+    if (!target.startsWith('file:')) {
+      event.preventDefault();
+      openExternalSafe(target);
+    }
+  });
+
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+}
+
+function openExternalSafe(target) {
+  if (/^(mailto:|https:\/\/)/i.test(String(target || ''))) shell.openExternal(target);
 }
 
 app.whenReady().then(createWindow);
@@ -326,7 +344,8 @@ ipcMain.handle('export-clips', async (event, { exportFolder, clips, settings = {
       if (!clip.sourcePath) throw new Error('This clip has no source video (try re-adding it).');
       const info = await sourceInfo(clip.sourcePath);
       await clipExport.exportClip(ctx, {
-        sourcePath: clip.sourcePath, outPath, clip, hasSourceAudio: info.hasAudio, settings,
+        sourcePath: clip.sourcePath, outPath, clip, hasSourceAudio: info.hasAudio,
+        sourceWidth: info.width, sourceHeight: info.height, settings,
       }, (percent) => send({ id: clip.id, status: 'running', percent }));
       send({ id: clip.id, status: 'done', percent: 100, outPath });
       results.push({ id: clip.id, ok: true, outPath });
@@ -337,4 +356,81 @@ ipcMain.handle('export-clips', async (event, { exportFolder, clips, settings = {
   }
   if (warnings.size && results.length) results[0].warnings = [...warnings];
   return results;
+});
+
+// ---------- About page ----------
+
+ipcMain.handle('get-app-info', async () => {
+  const pkg = require('./package.json');
+  return { name: '9jaCut', version: pkg.version, electron: process.versions.electron };
+});
+
+ipcMain.handle('open-external', async (_event, target) => {
+  openExternalSafe(target);
+});
+
+ipcMain.handle('copy-text', async (_event, text) => {
+  clipboard.writeText(String(text || ''));
+  return true;
+});
+
+// ---------- Voiceover recordings ----------
+
+ipcMain.handle('save-recording', async (_event, { bytes, extension }) => {
+  const dir = path.join(app.getPath('userData'), 'voiceovers');
+  fs.mkdirSync(dir, { recursive: true });
+  const ext = /^[a-z0-9]{2,5}$/i.test(extension || '') ? extension : 'webm';
+  const filePath = path.join(dir, `voiceover-${Date.now()}.${ext}`);
+  fs.writeFileSync(filePath, Buffer.from(bytes));
+  return { filePath, fileUrl: url.pathToFileURL(filePath).href };
+});
+
+// ---------- Auto-captions ----------
+
+const captions = require('./captions');
+
+function captionModelsDir() {
+  return path.join(app.getPath('userData'), 'caption-models');
+}
+
+ipcMain.handle('captions-info', async () => {
+  const dir = captionModelsDir();
+  return {
+    languages: captions.LANGUAGES,
+    models: Object.entries(captions.MODELS).map(([key, m]) => ({
+      key, label: m.label, downloadMB: m.downloadMB, ready: captions.isModelReady(dir, key),
+    })),
+  };
+});
+
+let captionJob = null;
+
+ipcMain.handle('generate-captions', async (event, { clipId, sourcePath, start, end, modelKey, language, translate }) => {
+  if (captionJob) return { ok: false, error: 'Another clip is being captioned. Please wait for it to finish.' };
+  const send = (data) => event.sender.send('captions-progress', { clipId, ...data });
+  captionJob = clipId;
+  try {
+    const paths = await captions.ensureModel(captionModelsDir(), modelKey, ({ stage, percent }) => send({ stage, percent }));
+    send({ stage: 'listen', percent: 0 });
+    const samples = await captions.extractAudio(getFfmpegPath(), sourcePath, start, end);
+    const lines = await captions.transcribe(paths, samples, {
+      language: language || '',
+      task: translate ? 'translate' : 'transcribe',
+      modelKey,
+      numThreads: Math.max(1, Math.min(4, require('os').cpus().length - 1)),
+    }, (percent) => send({ stage: 'listen', percent }));
+    // Lines come back relative to `start`; store absolute source times.
+    const absolute = lines.map((l) => ({ start: l.start + start, end: l.end + start, text: l.text }));
+    send({ stage: 'done', percent: 100 });
+    return { ok: true, lines: absolute };
+  } catch (err) {
+    const offline = /fetch failed|ENOTFOUND|EAI_AGAIN|ECONNRE|network/i.test(String(err && err.message));
+    const message = offline
+      ? 'Could not download the captions model. Connect to the internet once to download it; after that, captions work offline.'
+      : String(err && err.message ? err.message : err);
+    send({ stage: 'error', message });
+    return { ok: false, error: message };
+  } finally {
+    captionJob = null;
+  }
 });

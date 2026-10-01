@@ -134,12 +134,65 @@ function lookFilters(clip) {
   return out;
 }
 
+// Slow zoom in/out ("Ken Burns"). Scales every frame up a little more (or
+// less) and crops the centre back to the original size.
+const MOTION = {
+  zoomin: { amount: 0.15, dir: 1 },
+  zoomout: { amount: 0.15, dir: -1 },
+  punchin: { amount: 0.35, dir: 1 },
+};
+
+function motionFilters(clip, width, height) {
+  const m = MOTION[clip.motion];
+  if (!m || !width || !height) return [];
+  const W = Math.round(width / 2) * 2;
+  const H = Math.round(height / 2) * 2;
+  const D = fmt(Math.max(0.1, outputDuration(clip)));
+  const progress = m.dir > 0 ? `min(t/${D},1)` : `max(1-t/${D},0)`;
+  const z = `(1+${m.amount}*${progress})`;
+  return [
+    `scale=w='${W}*${z}':h=-2:eval=frame`,
+    `crop=w=${W}:h=${H}:x='${W}*(${z}-1)/2':y='${H}*(${z}-1)/2'`,
+    'setsar=1',
+  ];
+}
+
 function hexColor(color, fallback) {
   return /^#[0-9a-f]{6}$/i.test(String(color || '')) ? `0x${color.slice(1)}` : fallback;
 }
 
+// Auto-captions are stored with absolute source-video times (so trimming
+// the clip later keeps them in sync) and drawn like text with a shared style.
+function captionTexts(clip) {
+  const cap = clip.captions;
+  if (!cap || cap.enabled === false || !Array.isArray(cap.lines)) return [];
+  const style = cap.style || {};
+  const speed = getSpeed(clip);
+  const start = num(clip.start, 0);
+  const end = num(clip.end, start);
+  const out = [];
+  for (const line of cap.lines) {
+    const a = Math.max(start, num(line.start, 0));
+    const b = Math.min(end, num(line.end, 0));
+    if (b - a < 0.05) continue;
+    let text = String(line.text || '').trim();
+    if (!text) continue;
+    if (style.upper) text = text.toUpperCase();
+    out.push({
+      text,
+      size: style.size != null ? style.size : 6,
+      color: style.color || '#ffffff',
+      position: style.position || 'bottom',
+      style: style.style || 'box',
+      start: (a - start) / speed,
+      end: (b - start) / speed,
+    });
+  }
+  return out;
+}
+
 function textFilters(clip, ctx) {
-  const texts = Array.isArray(clip.texts) ? clip.texts : [];
+  const texts = [...(Array.isArray(clip.texts) ? clip.texts : []), ...captionTexts(clip)];
   if (ctx.hasDrawtext === false) {
     if (texts.some((t) => String(t.text || '').trim()) && ctx.warn) {
       ctx.warn('This copy of ffmpeg cannot draw text, so text was left out of the export.');
@@ -189,6 +242,8 @@ function fadeValues(clip) {
 //         getStickerPath, fontPath, tmpDir, intermediate }
 function buildClipArgs(opts) {
   const { sourcePath, outPath, clip, hasSourceAudio, settings = {}, forceAudio = false } = opts;
+  const sourceWidth = num(opts.sourceWidth, 0);
+  const sourceHeight = num(opts.sourceHeight, 0);
   const start = num(clip.start, 0);
   const end = num(clip.end, start + 0.1);
   const speed = getSpeed(clip);
@@ -205,6 +260,13 @@ function buildClipArgs(opts) {
     if (clip.audio.loop !== false) inputs.push('-stream_loop', '-1');
     inputs.push('-i', clip.audio.path);
     importedIdx = nextInput++;
+  }
+
+  const hasVoice = !!(clip.voiceover && clip.voiceover.path);
+  let voiceIdx = -1;
+  if (hasVoice) {
+    inputs.push('-i', clip.voiceover.path);
+    voiceIdx = nextInput++;
   }
 
   const stickers = (Array.isArray(clip.stickers) ? clip.stickers : [])
@@ -232,6 +294,9 @@ function buildClipArgs(opts) {
       `scale=${outDims.outW}:${outDims.outH}`,
       'setsar=1'
     );
+    v.push(...motionFilters(clip, outDims.outW, outDims.outH));
+  } else {
+    v.push(...motionFilters(clip, sourceWidth, sourceHeight));
   }
   chains.push(`[0:v]${v.join(',')}[vbase]`);
 
@@ -287,15 +352,25 @@ function buildClipArgs(opts) {
     chains.push(`[0:a]${a.join(',')}[aorig]`);
     aLabel = 'aorig';
   }
+  const mixInputs = aLabel ? [aLabel] : [];
   if (hasImported) {
     const vol = clamp(num(clip.audio.volume, 1), 0, 3);
     chains.push(`[${importedIdx}:a]atrim=start=0:end=${fmt(dur)},asetpts=PTS-STARTPTS,volume=${fmt(vol)}[aimp]`);
-    if (aLabel) {
-      chains.push('[aorig][aimp]amix=inputs=2:duration=first:dropout_transition=0[amix]');
-      aLabel = 'amix';
-    } else {
-      aLabel = 'aimp';
-    }
+    mixInputs.push('aimp');
+  }
+  if (hasVoice) {
+    const vol = clamp(num(clip.voiceover.volume, 1), 0, 3);
+    chains.push(`[${voiceIdx}:a]aresample=48000,atrim=start=0:end=${fmt(dur)},asetpts=PTS-STARTPTS,volume=${fmt(vol)}[avoice]`);
+    mixInputs.push('avoice');
+  }
+  if (mixInputs.length === 1) {
+    aLabel = mixInputs[0];
+  } else if (mixInputs.length > 1) {
+    // Sum the tracks at the volumes the user chose; the limiter stops the
+    // combined sound from clipping.
+    const pads = mixInputs.map((l) => `[${l}]`).join('');
+    chains.push(`${pads}amix=inputs=${mixInputs.length}:duration=longest:dropout_transition=0:normalize=0,alimiter=limit=0.95[amix]`);
+    aLabel = 'amix';
   }
   if (!aLabel && forceAudio) {
     inputs.push('-f', 'lavfi', '-t', fmt(dur), '-i', 'anullsrc=r=48000:cl=stereo');
@@ -308,7 +383,7 @@ function buildClipArgs(opts) {
     if (fo > 0) ap.push(`afade=t=out:st=${fmt(Math.max(0, dur - fo))}:d=${fmt(fo)}`);
     if (forceAudio) ap.push('aresample=48000', 'aformat=channel_layouts=stereo');
     // Pad short audio (e.g. non-looping music) so it never cuts the clip.
-    if (forceAudio || hasImported) ap.push(`apad=whole_dur=${fmt(dur)}`);
+    if (forceAudio || hasImported || hasVoice) ap.push(`apad=whole_dur=${fmt(dur)}`);
     if (ap.length) {
       chains.push(`[${aLabel}]${ap.join(',')}[afinal]`);
       aLabel = 'afinal';
@@ -387,9 +462,9 @@ function probeMedia(ffmpegPath, filePath) {
   });
 }
 
-async function exportClip(ctx, { sourcePath, outPath, clip, hasSourceAudio, settings, forceAudio, intermediate }, onProgress) {
+async function exportClip(ctx, { sourcePath, outPath, clip, hasSourceAudio, sourceWidth, sourceHeight, settings, forceAudio, intermediate }, onProgress) {
   const { args, duration } = buildClipArgs({
-    ...ctx, sourcePath, outPath, clip, hasSourceAudio, settings, forceAudio, intermediate,
+    ...ctx, sourcePath, outPath, clip, hasSourceAudio, sourceWidth, sourceHeight, settings, forceAudio, intermediate,
   });
   await runFfmpeg(ctx.ffmpegPath, args, duration, onProgress);
   return duration;
@@ -467,6 +542,8 @@ async function exportCombined(ctx, { clips, settings = {}, outPath, sourceInfo }
         outPath: partPath,
         clip,
         hasSourceAudio: info.hasAudio,
+        sourceWidth: info.width,
+        sourceHeight: info.height,
         settings,
         forceAudio: true,
         intermediate: true,
@@ -499,7 +576,9 @@ module.exports = {
   ASPECT_RATIOS,
   LOOK_FILTERS,
   TRANSITIONS,
+  MOTION,
   safeFileName,
+  captionTexts,
   getOutputDims,
   outputDuration,
   atempoChain,

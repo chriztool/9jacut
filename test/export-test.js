@@ -24,10 +24,12 @@ if (!mediaDir) {
     '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', path.join(mediaDir, 'src.mp4')]);
   gen(['-f', 'lavfi', '-i', 'testsrc=size=1280x720:rate=25:duration=6', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', path.join(mediaDir, 'silent.mp4')]);
   gen(['-f', 'lavfi', '-i', 'sine=frequency=220:duration=2', path.join(mediaDir, 'music.mp3')]);
+  gen(['-f', 'lavfi', '-i', 'sine=frequency=330:duration=3', '-c:a', 'libopus', path.join(mediaDir, 'voice.webm')]);
 }
 const src = path.join(mediaDir, 'src.mp4');
 const silent = path.join(mediaDir, 'silent.mp4');
 const music = path.join(mediaDir, 'music.mp3');
+const voice = path.join(mediaDir, 'voice.webm');
 const outDir = fs.mkdtempSync(path.join(os.tmpdir(), '9jacut-test-'));
 const stickerPath = path.join(__dirname, '..', 'assets', 'stickers', 'fire.png');
 
@@ -146,6 +148,64 @@ test('source without audio exports silently', async () => {
   await ex.exportClip(ctx, { sourcePath: silent, outPath: out, hasSourceAudio: false, clip: { start: 0, end: 2, fade: { in: 0.5, out: 0.5 } } });
   const info = await ex.probeMedia(ffmpegPath, out);
   assert.ok(!info.hasAudio);
+});
+
+test('captions are burned in and follow trims and speed', async () => {
+  const clip = {
+    start: 2, end: 6, speed: 2,
+    captions: {
+      style: { position: 'bottom', style: 'box', size: 6, upper: true },
+      lines: [
+        { start: 1, end: 3, text: 'starts before the clip' },
+        { start: 3, end: 5, text: 'inside the clip' },
+        { start: 7, end: 8, text: 'after the clip' },
+      ],
+    },
+  };
+  const texts = ex.captionTexts(clip);
+  assert.strictEqual(texts.length, 2);
+  assert.deepStrictEqual([texts[0].start, texts[0].end], [0, 0.5]);
+  assert.deepStrictEqual([texts[1].start, texts[1].end], [0.5, 1.5]);
+  assert.strictEqual(texts[1].text, 'INSIDE THE CLIP');
+  const out = path.join(outDir, 'captions.mp4');
+  await ex.exportClip(ctx, { sourcePath: src, outPath: out, hasSourceAudio: true, clip });
+  const info = await ex.probeMedia(ffmpegPath, out);
+  near(info.duration, 2, 0.15, 'duration');
+});
+
+for (const motion of Object.keys(ex.MOTION)) {
+  test(`${motion} motion on original and vertical clips keeps the frame size`, async () => {
+    const out1 = path.join(outDir, `motion-${motion}.mp4`);
+    await ex.exportClip(ctx, { sourcePath: src, outPath: out1, hasSourceAudio: true, sourceWidth: 1920, sourceHeight: 1080, clip: { start: 0, end: 2, motion } });
+    const a = await ex.probeMedia(ffmpegPath, out1);
+    assert.deepStrictEqual([a.width, a.height], [1920, 1080]);
+    const out2 = path.join(outDir, `motion-${motion}-v.mp4`);
+    await ex.exportClip(ctx, {
+      sourcePath: src, outPath: out2, hasSourceAudio: true, settings: { resolution: '720' },
+      clip: { start: 0, end: 2, motion, aspect: 'vertical', crop: { x: 656, y: 0, w: 608, h: 1080 } },
+    });
+    const b = await ex.probeMedia(ffmpegPath, out2);
+    assert.deepStrictEqual([b.width, b.height], [720, 1280]);
+  });
+}
+
+test('voiceover mixes with the video sound and music', async () => {
+  const out = path.join(outDir, 'voiceover.mp4');
+  await ex.exportClip(ctx, {
+    sourcePath: src, outPath: out, hasSourceAudio: true,
+    clip: { start: 0, end: 4, audio: { path: music, volume: 0.5 }, voiceover: { path: voice, volume: 1.2 } },
+  });
+  const info = await ex.probeMedia(ffmpegPath, out);
+  near(info.duration, 4, 0.15, 'duration');
+  assert.ok(info.hasAudio);
+});
+
+test('voiceover alone on a silent video', async () => {
+  const out = path.join(outDir, 'voiceover-silent.mp4');
+  await ex.exportClip(ctx, { sourcePath: silent, outPath: out, hasSourceAudio: false, clip: { start: 0, end: 3, voiceover: { path: voice } } });
+  const info = await ex.probeMedia(ffmpegPath, out);
+  assert.ok(info.hasAudio);
+  near(info.duration, 3, 0.15, 'duration');
 });
 
 const sourceInfo = (p) => ex.probeMedia(ffmpegPath, p);

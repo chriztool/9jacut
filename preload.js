@@ -16,6 +16,17 @@ contextBridge.exposeInMainWorld('nineJaCut', {
     ipcRenderer.on('export-progress', listener);
     return () => ipcRenderer.removeListener('export-progress', listener);
   },
+  getAppInfo: () => ipcRenderer.invoke('get-app-info'),
+  openExternal: (target) => ipcRenderer.invoke('open-external', target),
+  copyText: (text) => ipcRenderer.invoke('copy-text', text),
+  saveRecording: (payload) => ipcRenderer.invoke('save-recording', payload),
+  getCaptionsInfo: () => ipcRenderer.invoke('captions-info'),
+  generateCaptions: (payload) => ipcRenderer.invoke('generate-captions', payload),
+  onCaptionsProgress: (callback) => {
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on('captions-progress', listener);
+    return () => ipcRenderer.removeListener('captions-progress', listener);
+  },
   getPromoTemplates: () => ipcRenderer.invoke('get-promo-templates'),
   selectPromoMedia: () => ipcRenderer.invoke('select-promo-media'),
   exportPromo: (payload) => ipcRenderer.invoke('export-promo', payload),

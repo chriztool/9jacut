@@ -7,10 +7,11 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand"><span class="brand-nine">9ja</span>cut</div>
+    <div class="brand"><svg class="ng-flag" viewBox="0 0 6 3" aria-label="Nigerian flag" role="img"><title>Nigeria</title><rect width="6" height="3" fill="#008751"/><rect x="2" width="2" height="3" fill="#ffffff"/></svg><span class="brand-name"><span class="brand-nine">9ja</span>cut</span></div>
     <div class="mode-tabs">
       <button id="tabClipEditor" class="mode-tab active">Clip Editor</button>
       <button id="tabPromoVideo" class="mode-tab">Promo Video</button>
+      <button id="tabAbout" class="mode-tab">About</button>
     </div>
     <div class="actions">
       <button id="btnUndo" class="btn" disabled title="Undo last change (Ctrl+Z)">↶ Undo</button>
@@ -123,7 +124,7 @@
           <input id="setCombinedName" class="clip-time combined-name" placeholder="Video name" />
         </div>
       </div>
-      <p class="hint">Mark In / Mark Out on the video, then Add Clip. Pick an aspect ratio to crop &amp; reframe a clip for posting, or leave it Original. Add your own audio file under a clip to mix it in or replace the original sound. Open <strong>✨ Effects</strong> on a clip for speed, looks, text and fades.</p>
+      <p class="hint">Mark In / Mark Out on the video, then Add Clip. Pick an aspect ratio to crop &amp; reframe a clip for posting, or leave it Original. Add your own audio file under a clip to mix it in or replace the original sound. Open <strong>✨ Effects</strong> on a clip for auto-captions, text, speed, looks, zoom, fades and voiceover.</p>
     </aside>
   </main>
   </div>
@@ -176,6 +177,95 @@
       <div class="progress-bar" id="promoProgressBar"><div class="progress-fill"></div></div>
       <div id="promoStatus" class="clip-status"></div>
     </section>
+  </main>
+
+  <main class="about-layout hidden" id="aboutView">
+    <div class="about-page">
+      <header class="about-hero">
+        <svg class="ng-flag big" viewBox="0 0 6 3" aria-label="Nigerian flag" role="img"><title>Nigeria</title><rect width="6" height="3" fill="#008751"/><rect x="2" width="2" height="3" fill="#ffffff"/></svg>
+        <div>
+          <h1><span class="brand-nine">9ja</span>Cut</h1>
+          <p class="about-tagline">A free video editor made in Naija, for creators and small businesses.</p>
+          <p class="app-version about-dim">Version</p>
+        </div>
+      </header>
+
+      <section>
+        <h2>What 9jaCut does</h2>
+        <p>9jaCut turns long recordings, phone videos and stream footage into short, ready-to-post clips for TikTok, Reels, YouTube Shorts and WhatsApp status. It also makes business promo videos from your photos in a few clicks.</p>
+        <p>Everything is <strong>free</strong>: no watermark, no subscription, no account, and no feature you start using suddenly gets locked behind a paywall. Your videos never leave your computer.</p>
+      </section>
+
+      <section>
+        <h2>Features</h2>
+        <div class="about-grid">
+          <div class="about-card"><h3>✂️ Cut &amp; reframe</h3><p>Mark in and out to cut clips. Reframe any clip to vertical 9:16, square, 4:5 or your own shape, and drag to choose what stays in shot.</p></div>
+          <div class="about-card"><h3>💬 Auto-captions</h3><p>Turns speech into on-screen captions automatically. Works in English and Pidgin, Yoruba, Hausa and more, with an option to translate into English. Fix any word before you export.</p></div>
+          <div class="about-card"><h3>🔤 Text</h3><p>Add titles and messages with your own colour, size, position and style (outline, box or plain), and choose when each one appears.</p></div>
+          <div class="about-card"><h3>🎨 Looks</h3><p>Eight colour looks including Naija Gold, Cinematic and Black &amp; white, plus brightness, contrast and saturation.</p></div>
+          <div class="about-card"><h3>⚡ Speed &amp; motion</h3><p>Slow-mo down to 0.25x or fast-forward up to 4x, plus smooth zoom-in and zoom-out effects.</p></div>
+          <div class="about-card"><h3>🎵 Sound</h3><p>Add your own music (it can loop to fill the clip), record a voiceover with your microphone, adjust volumes and reduce background noise.</p></div>
+          <div class="about-card"><h3>😀 Stickers</h3><p>Drop emoji stickers anywhere on the video and set when they show.</p></div>
+          <div class="about-card"><h3>🎬 One finished video</h3><p>Join all your clips into one video with transitions such as crossfade, slide, wipe or circle. Clips of a different shape sit on a blurred background.</p></div>
+          <div class="about-card"><h3>🏪 Promo videos</h3><p>Fill in your business name, hours, address and contact, add photos, pick one of 52 styles and export a vertical promo video.</p></div>
+          <div class="about-card"><h3>💾 Projects &amp; export</h3><p>Save and reopen projects, undo any change, and export from 720p up to 4K.</p></div>
+        </div>
+      </section>
+
+      <section>
+        <h2>How to make a video</h2>
+        <ol class="about-steps">
+          <li>Click <strong>Open Video</strong> (or drag a video onto the window).</li>
+          <li>Play to the start of a good moment and press <strong>Mark In</strong> (or <kbd>I</kbd>), then play to the end and press <strong>Mark Out</strong> (<kbd>O</kbd>).</li>
+          <li>Click <strong>+ Add Clip</strong> (<kbd>Enter</kbd>). Repeat for every moment you want.</li>
+          <li>On each clip, pick a shape (for example <em>Vertical 9:16</em>) and click <strong>Reframe</strong> to choose what stays in shot.</li>
+          <li>Open <strong>✨ Effects</strong> on a clip for captions, text, speed, looks, zoom, fades, music and voiceover. The player shows your changes as you play.</li>
+          <li>Under <strong>Export settings</strong>, choose the resolution, and tick <em>Join all clips into one video</em> if you want a single video.</li>
+          <li>Click <strong>Choose Export Folder</strong>, then <strong>Export</strong>. The folder opens when it's done.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>Keyboard shortcuts</h2>
+        <table class="about-keys">
+          <tr><td><kbd>Space</kbd></td><td>Play / pause</td><td><kbd>I</kbd> / <kbd>O</kbd></td><td>Mark in / mark out</td></tr>
+          <tr><td><kbd>Enter</kbd></td><td>Add clip</td><td><kbd>←</kbd> / <kbd>→</kbd></td><td>Jump 1 second (Shift: 5 seconds)</td></tr>
+          <tr><td><kbd>,</kbd> / <kbd>.</kbd></td><td>Step one frame</td><td><kbd>Home</kbd> / <kbd>End</kbd></td><td>Go to start / end</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo</td><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save project</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>Open video</td><td><kbd>Esc</kbd></td><td>Close reframe / sticker editing</td></tr>
+        </table>
+      </section>
+
+      <section>
+        <h2>Your privacy</h2>
+        <p>9jaCut works on your own computer. Your videos, recordings and projects are never uploaded anywhere. The only time it uses the internet is the first time you use auto-captions: it downloads the free speech-recognition model once (about 116–208 MB), and after that captions work offline too.</p>
+      </section>
+
+      <section class="about-contact">
+        <h2>Contact &amp; support</h2>
+        <p>Questions, a bug to report, or an idea for a new feature? Send an email. We'd love to hear from you.</p>
+        <div class="contact-row">
+          <span class="contact-label">Email</span>
+          <a href="mailto:ogemdichris@yahoo.com?subject=9jaCut" data-external="mailto:ogemdichris@yahoo.com?subject=9jaCut" class="contact-link">ogemdichris@yahoo.com</a>
+          <button id="btnCopyEmail" class="btn small" data-copy="ogemdichris@yahoo.com">Copy email</button>
+        </div>
+        <div class="contact-row">
+          <span class="contact-label">Source code</span>
+          <a href="https://github.com/chriztool/9jacut" data-external="https://github.com/chriztool/9jacut" class="contact-link">github.com/chriztool/9jacut</a>
+        </div>
+      </section>
+
+      <section>
+        <h2>Credits</h2>
+        <p class="about-dim">9jaCut is built with Electron and FFmpeg. Auto-captions use OpenAI's Whisper speech model (MIT licence) running through sherpa-onnx (Apache 2.0). Text uses the Poppins font (SIL Open Font Licence).</p>
+      </section>
+
+      <footer class="about-footer">
+        Made with ❤️ in Nigeria
+        <svg class="ng-flag" viewBox="0 0 6 3" aria-hidden="true"><rect width="6" height="3" fill="#008751"/><rect x="2" width="2" height="3" fill="#ffffff"/></svg>
+        <span class="app-version"></span>
+      </footer>
+    </div>
   </main>
 
   <footer id="statusBar" class="statusbar"></footer>

@@ -1,7 +1,7 @@
 {
   "name": "9jacut",
-  "version": "1.1.0",
-  "description": "9jacut — manual clip cutter and reframer for stream recordings",
+  "version": "1.2.0",
+  "description": "9jacut — free video editor: clips, reframing, captions, effects and promo videos",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -15,7 +15,10 @@
     "electron-builder": "^24.13.3"
   },
   "dependencies": {
-    "ffmpeg-static": "^5.2.0"
+    "ffmpeg-static": "^5.2.0",
+    "sherpa-onnx-node": "^1.13.8",
+    "tar-stream": "^3.2.1",
+    "unbzip2-stream": "^1.4.3"
   },
   "build": {
     "appId": "com.ninejacut.app",
@@ -26,6 +29,7 @@
       "promo-templates.js",
       "promo-export.js",
       "clip-export.js",
+      "captions.js",
       "renderer/**/*",
       "assets/**/*",
       "node_modules/**/*"
@@ -33,11 +37,17 @@
     "asarUnpack": [
       "node_modules/ffmpeg-static/**/*",
       "assets/stickers/**/*",
-      "assets/fonts/**/*"
+      "assets/fonts/**/*",
+      "node_modules/sherpa-onnx-*/**"
     ],
     "win": {
       "target": [
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "build/icon.ico"
     },

@@ -37,6 +37,22 @@ copy of ffmpeg.
   Project** / **Load Project** (writes/reads a `.json` project file covering
   every loaded video, clip, crop, audio, and sticker) so you can pick up a
   project later without redoing anything.
+- **💬 Auto-captions** (inside ✨ Effects): one click turns the speech in a
+  clip into timed on-screen captions, using OpenAI's Whisper speech model
+  running **on your own computer** (via sherpa-onnx; no account, no upload,
+  no cost per use). Languages: auto-detect, English/Pidgin, Yoruba, Hausa,
+  French, Swahili, Arabic, Spanish, Portuguese, plus *Translate to English*.
+  Choose **Accurate** (~208 MB download) or **Fast** (~116 MB). The model
+  downloads once on first use; after that captions work offline. Every
+  line can be edited or deleted, and captions have their own style (box,
+  outline or plain; colour; size; position; ALL CAPS). Captions stay in
+  sync if you later trim the clip or change its speed.
+- **🎙 Voiceover**: record your voice with the microphone while the clip
+  plays (muted, so it doesn't echo). Listen back, re-record, and set its
+  volume; it's mixed with the video sound and any music.
+- **Motion**: slow zoom in, slow zoom out or fast zoom in across a clip.
+- **About tab**: what the app does, a how-to, shortcuts, privacy notes and
+  contact details (ogemdichris@yahoo.com).
 - **✨ Effects** on any clip (click to expand under the clip):
   - **Speed** from 0.25x slow-mo to 4x, with the sound kept in sync.
   - **Looks**: Vivid, Warm, Cool, Naija Gold, Cinematic, Vintage, Faded
@@ -66,6 +82,12 @@ copy of ffmpeg.
   layouts (Hero Card, Split Panel, Spotlight Grid, Side Strip) × 13 color
   themes — and export a vertical 9:16 promo video with your info baked in.
 
+## Where 9jaCut keeps its files
+
+- Captions models: `%APPDATA%\9jacut\caption-models` (delete the folder to
+  free the space; it will download again next time you use captions).
+- Voiceover recordings: `%APPDATA%\9jacut\voiceovers`.
+
 ## Running it (development)
 
 Requires [Node.js](https://nodejs.org) (LTS) installed on Windows.
@@ -83,8 +105,8 @@ npm test
 ```
 
 Generates small test videos and runs every export feature (speed, looks,
-text, fades, music, joining with transitions) through ffmpeg, checking the
-size and length of each result.
+text, captions, zoom, fades, music, voiceover, joining with transitions)
+through ffmpeg, checking the size and length of each result.
 
 ## Building the single shareable .exe
 
@@ -135,10 +157,12 @@ tooling (Wine) that isn't set up here.
   preload.js        # safe IPC bridge exposed to the renderer as window.nineJaCut
   promo-templates.js # Promo Video: 4 layouts x 13 themes = 52 named presets
   promo-export.js   # Promo Video: builds/runs the ffmpeg filter graph
-  clip-export.js    # Clip Editor export: speed, looks, text, fades, audio, join
+  clip-export.js    # Clip Editor export: speed, looks, text, captions, zoom, audio, join
+  captions.js       # Auto-captions: model download, speech detection, Whisper
   test/
     export-test.js  # renders real videos through every export feature (npm test)
     ui-harness.js   # drives the real app window and takes screenshots
+    ui-captions-harness.js # same, for captions, voiceover, zoom and About
   build/
     icon.ico        # app icon
   assets/

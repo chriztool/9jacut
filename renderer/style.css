@@ -856,3 +856,128 @@ body {
   cursor: pointer;
 }
 .combined-name { width: 120px; text-align: left; }
+
+/* ---------- v1.2: flag, About page, captions, voiceover ---------- */
+.brand { display: flex; align-items: center; gap: 8px; }
+.ng-flag {
+  width: 27px;
+  height: 18px;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+  flex: none;
+}
+.ng-flag.big { width: 96px; height: 64px; border-radius: 8px; }
+
+.about-layout {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+.about-layout.hidden { display: none; }
+.about-page {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 28px 32px 40px;
+  line-height: 1.6;
+}
+.about-hero {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+.about-hero h1 { margin: 0; font-size: 34px; letter-spacing: 0.01em; }
+.about-tagline { margin: 2px 0 0; font-size: 15px; color: var(--text); }
+.about-dim { color: var(--text-dim); margin: 2px 0 0; }
+.about-page h2 { font-size: 17px; margin: 26px 0 8px; color: var(--accent); }
+.about-page p { margin: 0 0 10px; }
+.about-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 10px;
+}
+.about-card {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.about-card h3 { margin: 0 0 4px; font-size: 14px; }
+.about-card p { margin: 0; font-size: 12.5px; color: var(--text-dim); line-height: 1.5; }
+.about-steps { margin: 0; padding-left: 22px; }
+.about-steps li { margin: 4px 0; }
+kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--border-soft);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--input-bg);
+  font-family: inherit;
+  font-size: 12px;
+}
+.about-keys { border-collapse: collapse; width: 100%; font-size: 13px; }
+.about-keys td { padding: 5px 8px; border-bottom: 1px solid var(--border); }
+.about-contact {
+  margin-top: 26px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px 18px 14px;
+}
+.about-contact h2 { margin-top: 14px; }
+.contact-row { display: flex; align-items: center; gap: 12px; margin: 8px 0; flex-wrap: wrap; }
+.contact-label { width: 100px; color: var(--text-dim); }
+.contact-link { color: var(--accent); font-weight: 600; text-decoration: none; font-size: 15px; }
+.contact-link:hover { text-decoration: underline; }
+.about-footer {
+  margin-top: 30px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.about-footer .app-version { margin-left: auto; }
+
+/* Clip Editor-only buttons are hidden on the About and Promo pages. */
+body[data-mode="about"] .actions > :not(#btnThemeToggle):not(.spacer) { visibility: hidden; }
+body[data-mode="about"] #sourceRow { display: none; }
+
+.caption-status { white-space: normal; margin: 2px 0 4px; color: var(--accent); }
+.caption-list {
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 6px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--input-bg);
+  padding: 4px;
+}
+.caption-line { display: flex; align-items: center; gap: 4px; margin: 2px 0; }
+.caption-time {
+  flex: none;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  padding: 2px 3px;
+}
+.caption-text {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 3px 5px;
+}
+.caption-text:focus { border-color: var(--border-soft); outline: none; background: var(--card); }
+.rec-note { color: #e05050; font-weight: 600; }
+#preview { transition: transform 0.25s linear; }

@@ -55,6 +55,8 @@ const LOOK_PREVIEW = {
   faded: 'contrast(0.88) brightness(1.04) saturate(0.8)',
   bw: 'grayscale(1) contrast(1.1)',
 };
+const MOTION_OPTIONS = [['none', 'None'], ['zoomin', 'Slow zoom in'], ['zoomout', 'Slow zoom out'], ['punchin', 'Fast zoom in']];
+const MOTION_PREVIEW = { zoomin: [0.15, 1], zoomout: [0.15, -1], punchin: [0.35, 1] };
 const TEXT_POSITION_OPTIONS = [['top', 'Top'], ['center', 'Middle'], ['bottom', 'Bottom']];
 const TEXT_STYLE_OPTIONS = [['outline', 'Outline'], ['box', 'Box'], ['plain', 'Plain']];
 
@@ -105,6 +107,9 @@ function normalizeClip(clip) {
   clip.fade = { in: 0, out: 0, ...(clip.fade || {}) };
   if (typeof clip.origVolume !== 'number') clip.origVolume = 1;
   clip.denoise = !!clip.denoise;
+  if (!MOTION_PREVIEW[clip.motion]) clip.motion = 'none';
+  if (clip.captions === undefined) clip.captions = null;
+  if (clip.voiceover === undefined) clip.voiceover = null;
   if (clip.audio && typeof clip.audio.loop !== 'boolean') clip.audio.loop = true;
   return clip;
 }
@@ -447,6 +452,10 @@ video.addEventListener('timeupdate', () => {
   updateTimeLabel();
   if (state.editMode === 'reframe') positionCropOverlay();
   if (state.editMode === 'stickers') positionStickerLayer();
+  if (state.recording) {
+    const recClip = state.clips.find((c) => c.id === state.recording.clipId);
+    if (!recClip || video.currentTime >= recClip.end - 0.05) stopVoiceover();
+  }
   updatePreviewFx();
 });
 
@@ -908,9 +917,12 @@ function fxSummaryText(clip) {
   }
   const textCount = clip.texts.filter((t) => String(t.text || '').trim()).length;
   if (textCount) bits.push(`${textCount} text${textCount > 1 ? 's' : ''}`);
+  if (clip.motion !== 'none') bits.push('zoom');
+  if (clip.captions && clip.captions.lines && clip.captions.lines.length) bits.push('captions');
+  if (clip.voiceover) bits.push('voiceover');
   if (clip.fade.in || clip.fade.out) bits.push('fades');
   if (clip.denoise) bits.push('clean audio');
-  return `✨ Effects${bits.length ? ` · ${bits.join(' · ')}` : ': speed, look, text, fade'}`;
+  return `✨ Effects${bits.length ? ` · ${bits.join(' · ')}` : ': captions, text, speed, look, zoom'}`;
 }
 
 // Move the playhead into a clip so its effects show in the preview.
@@ -957,6 +969,11 @@ function buildFxSection(clip) {
   });
   details.appendChild(makeLine('Speed', speedSel, lengthNote));
 
+  // Motion (zoom)
+  const motionSel = makeSelect(MOTION_OPTIONS, clip.motion, (v) => { pushUndo(); clip.motion = v; changed(); });
+  motionSel.title = 'A smooth zoom across the whole clip';
+  details.appendChild(makeLine('Motion', motionSel));
+
   // Fades
   const fadeIn = makeSelect(FADE_OPTIONS, clip.fade.in, (v) => { pushUndo(); clip.fade.in = Number(v); changed(); });
   const fadeOut = makeSelect(FADE_OPTIONS, clip.fade.out, (v) => { pushUndo(); clip.fade.out = Number(v); changed(); });
@@ -993,6 +1010,10 @@ function buildFxSection(clip) {
     clip.denoise = on;
     refreshSummary();
   })));
+  details.appendChild(buildVoiceoverLine(clip));
+
+  // Captions
+  details.appendChild(buildCaptionsSection(clip, changed));
 
   // Text
   const textHeader = document.createElement('div');
@@ -1094,6 +1115,351 @@ function buildTextEditor(clip, t, changed) {
   return wrap;
 }
 
+// ---------- Auto-captions ----------
+const CAPTION_PREFS_KEY = '9jacut-caption-prefs';
+const captionUi = {
+  info: { languages: [['', 'Auto-detect']], models: [] },
+  prefs: { language: '', model: 'accurate', translate: false },
+  job: null, // { clipId, text }
+};
+
+function loadCaptionPrefs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CAPTION_PREFS_KEY) || 'null');
+    if (saved) captionUi.prefs = { ...captionUi.prefs, ...saved };
+  } catch (e) { /* ignore */ }
+}
+
+function saveCaptionPrefs() {
+  try { localStorage.setItem(CAPTION_PREFS_KEY, JSON.stringify(captionUi.prefs)); } catch (e) { /* ignore */ }
+}
+
+async function refreshCaptionsInfo() {
+  try { captionUi.info = await window.nineJaCut.getCaptionsInfo(); } catch (e) { /* keep defaults */ }
+}
+
+const DEFAULT_CAPTION_STYLE = { position: 'bottom', style: 'box', size: 6, color: '#ffffff', upper: false };
+
+// Same conversion as clip-export.js: absolute source times -> finished clip.
+function captionPreviewItems(clip) {
+  const cap = clip.captions;
+  if (!cap || cap.enabled === false || !Array.isArray(cap.lines)) return [];
+  const style = { ...DEFAULT_CAPTION_STYLE, ...(cap.style || {}) };
+  const speed = clip.speed || 1;
+  return cap.lines
+    .filter((l) => l.end > clip.start && l.start < clip.end && String(l.text || '').trim())
+    .map((l) => ({
+      text: style.upper ? String(l.text).toUpperCase() : l.text,
+      size: style.size,
+      color: style.color,
+      position: style.position,
+      style: style.style,
+      start: (Math.max(l.start, clip.start) - clip.start) / speed,
+      end: (Math.min(l.end, clip.end) - clip.start) / speed,
+    }));
+}
+
+function captionStatusText(data) {
+  const model = captionUi.info.models.find((m) => m.key === captionUi.prefs.model);
+  if (data.stage === 'download') {
+    return `Downloading the captions model… ${data.percent || 0}% (one time only${model ? `, about ${model.downloadMB} MB` : ''})`;
+  }
+  if (data.stage === 'unpack') return 'Preparing the captions model… (one time only, about a minute)';
+  if (data.stage === 'listen') return `Listening to the clip… ${data.percent || 0}%`;
+  if (data.stage === 'error') return `Captions failed: ${data.message}`;
+  return '';
+}
+
+window.nineJaCut.onCaptionsProgress((data) => {
+  if (!captionUi.job || captionUi.job.clipId !== data.clipId) return;
+  captionUi.job.text = captionStatusText(data);
+  const el = document.getElementById(`capstatus-${data.clipId}`);
+  if (el) el.textContent = captionUi.job.text;
+});
+
+async function runAutoCaptions(clip) {
+  if (captionUi.job) { setStatus('Captions are already being made for another clip — please wait.'); return; }
+  if (!clip.sourcePath) return;
+  captionUi.job = { clipId: clip.id, text: 'Starting…' };
+  renderClipList();
+  setStatus(`Making captions for ${clip.name}…`);
+  const result = await window.nineJaCut.generateCaptions({
+    clipId: clip.id,
+    sourcePath: clip.sourcePath,
+    start: clip.start,
+    end: clip.end,
+    modelKey: captionUi.prefs.model,
+    language: captionUi.prefs.language,
+    translate: !!captionUi.prefs.translate,
+  });
+  captionUi.job = null;
+  await refreshCaptionsInfo();
+  const live = state.clips.find((c) => c.id === clip.id);
+  if (!live) { renderClipList(); return; }
+  if (!result.ok) {
+    renderClipList();
+    const el = document.getElementById(`capstatus-${clip.id}`);
+    if (el) el.textContent = `Captions failed: ${result.error}`;
+    setStatus(`Captions failed: ${result.error}`);
+    return;
+  }
+  pushUndo();
+  live.captions = {
+    enabled: true,
+    style: { ...DEFAULT_CAPTION_STYLE, ...((live.captions && live.captions.style) || {}) },
+    lines: result.lines.map((l, i) => ({ id: `cap-${Date.now()}-${i}`, ...l })),
+  };
+  openFxPanels.add(live.id);
+  renderClipList();
+  previewClip(live);
+  setStatus(result.lines.length
+    ? `Added ${result.lines.length} caption line${result.lines.length > 1 ? 's' : ''} to ${live.name}. Check the words and fix any mistakes.`
+    : `No speech was found in ${live.name}.`);
+}
+
+function buildCaptionsSection(clip, changed) {
+  const wrap = document.createElement('div');
+
+  const head = document.createElement('div');
+  head.className = 'fx-line fx-subhead';
+  const title = document.createElement('span');
+  title.className = 'fx-label';
+  title.textContent = 'Captions';
+  const busy = !!captionUi.job;
+  const mine = busy && captionUi.job.clipId === clip.id;
+  const runBtn = document.createElement('button');
+  runBtn.className = 'btn small primary';
+  runBtn.textContent = mine ? 'Working…' : (clip.captions ? '↻ Redo captions' : '💬 Auto-caption');
+  runBtn.disabled = busy;
+  runBtn.title = 'Turn the speech in this clip into on-screen captions (runs on your computer)';
+  runBtn.addEventListener('click', () => runAutoCaptions(clip));
+  head.appendChild(title);
+  head.appendChild(runBtn);
+  wrap.appendChild(head);
+
+  const langSel = makeSelect(captionUi.info.languages, captionUi.prefs.language, (v) => {
+    captionUi.prefs.language = v;
+    saveCaptionPrefs();
+  });
+  langSel.title = 'Language spoken in the video';
+  const modelOptions = captionUi.info.models.length
+    ? captionUi.info.models.map((m) => [m.key, `${m.label}${m.ready ? ' ✓' : ` (${m.downloadMB} MB)`}`])
+    : [['accurate', 'Accurate'], ['fast', 'Fast']];
+  const modelSel = makeSelect(modelOptions, captionUi.prefs.model, (v) => {
+    captionUi.prefs.model = v;
+    saveCaptionPrefs();
+  });
+  modelSel.title = 'Accurate makes fewer mistakes; Fast is quicker and a smaller download. ✓ = already downloaded';
+  wrap.appendChild(makeLine('Language', langSel, modelSel));
+  wrap.appendChild(makeLine('', makeCheck('Translate to English', !!captionUi.prefs.translate, (on) => {
+    captionUi.prefs.translate = on;
+    saveCaptionPrefs();
+  })));
+
+  const status = document.createElement('div');
+  status.className = 'fx-note caption-status';
+  status.id = `capstatus-${clip.id}`;
+  status.textContent = mine ? captionUi.job.text : '';
+  wrap.appendChild(status);
+
+  const cap = clip.captions;
+  if (!cap) return wrap;
+  cap.style = { ...DEFAULT_CAPTION_STYLE, ...(cap.style || {}) };
+  const st = cap.style;
+
+  const posSel = makeSelect(TEXT_POSITION_OPTIONS, st.position, (v) => { pushUndo(); st.position = v; changed(); });
+  const styleSel = makeSelect(TEXT_STYLE_OPTIONS, st.style, (v) => { pushUndo(); st.style = v; changed(); });
+  const color = document.createElement('input');
+  color.type = 'color';
+  color.value = st.color;
+  color.title = 'Caption color';
+  color.addEventListener('pointerdown', () => armSnapshot());
+  color.addEventListener('input', () => { commitSnapshotIfArmed(); st.color = color.value; changed(); });
+  wrap.appendChild(makeLine('Style', posSel, styleSel, color));
+  wrap.appendChild(makeLine('Size', makeSlider(3, 14, 0.5, st.size, (v) => { st.size = v; changed(); })));
+  wrap.appendChild(makeLine('',
+    makeCheck('ALL CAPS', !!st.upper, (on) => { pushUndo(); st.upper = on; changed(); }),
+    makeCheck('Show captions', cap.enabled !== false, (on) => { pushUndo(); cap.enabled = on; changed(); })));
+
+  const list = document.createElement('div');
+  list.className = 'caption-list';
+  const speed = clip.speed || 1;
+  const inClip = cap.lines.filter((l) => l.end > clip.start && l.start < clip.end);
+  for (const line of inClip) {
+    const row = document.createElement('div');
+    row.className = 'caption-line';
+    const time = document.createElement('button');
+    time.className = 'caption-time';
+    time.textContent = formatTime((Math.max(line.start, clip.start) - clip.start) / speed);
+    time.title = 'Jump to this line';
+    time.addEventListener('click', () => {
+      state.previewClipId = clip.id;
+      video.currentTime = Math.max(line.start, clip.start) + 0.01;
+    });
+    const input = document.createElement('input');
+    input.className = 'caption-text';
+    input.value = line.text;
+    input.addEventListener('focus', () => armSnapshot());
+    input.addEventListener('input', () => {
+      commitSnapshotIfArmed();
+      line.text = input.value;
+      changed();
+    });
+    const del = document.createElement('button');
+    del.className = 'btn small danger';
+    del.textContent = '×';
+    del.title = 'Delete this caption line';
+    del.addEventListener('click', () => {
+      pushUndo();
+      cap.lines = cap.lines.filter((l) => l !== line);
+      renderClipList();
+    });
+    row.appendChild(time);
+    row.appendChild(input);
+    row.appendChild(del);
+    list.appendChild(row);
+  }
+  if (!inClip.length) {
+    const empty = document.createElement('div');
+    empty.className = 'fx-note';
+    empty.textContent = 'No caption lines inside this clip.';
+    list.appendChild(empty);
+  }
+  wrap.appendChild(list);
+
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'btn small danger';
+  removeBtn.textContent = 'Remove captions';
+  removeBtn.addEventListener('click', () => {
+    pushUndo();
+    clip.captions = null;
+    renderClipList();
+  });
+  wrap.appendChild(makeLine('', removeBtn));
+  return wrap;
+}
+
+// ---------- Voiceover recording ----------
+state.recording = null; // { clipId, recorder, stream, wasMuted, timer, startedAt }
+
+function stopVoiceover() {
+  const rec = state.recording;
+  if (rec && rec.recorder.state !== 'inactive') rec.recorder.stop();
+}
+
+async function startVoiceover(clip) {
+  if (state.recording) return;
+  if (!navigator.mediaDevices || !window.MediaRecorder) {
+    setStatus('Voice recording is not available on this computer.');
+    return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+  } catch (e) {
+    setStatus(`Could not use the microphone: ${e.message}. Check that a mic is plugged in and allowed in Windows privacy settings.`);
+    return;
+  }
+  await previewClip(clip);
+  video.pause();
+  video.currentTime = clip.start;
+  const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+  const recorder = new MediaRecorder(stream, { mimeType: mime });
+  const chunks = [];
+  recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+  state.recording = { clipId: clip.id, recorder, stream, wasMuted: video.muted, timer: null, startedAt: 0 };
+
+  recorder.onstop = async () => {
+    const rec = state.recording;
+    state.recording = null;
+    stream.getTracks().forEach((t) => t.stop());
+    clearInterval(rec && rec.timer);
+    video.pause();
+    video.muted = rec ? rec.wasMuted : false;
+    const live = state.clips.find((c) => c.id === clip.id);
+    if (!chunks.length || !live) { renderClipList(); return; }
+    const blob = new Blob(chunks, { type: mime });
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const saved = await window.nineJaCut.saveRecording({ bytes, extension: 'webm' });
+    pushUndo();
+    live.voiceover = { path: saved.filePath, url: saved.fileUrl, volume: 1 };
+    renderClipList();
+    setStatus(`Voiceover saved for ${live.name}`);
+  };
+
+  // The video plays muted (so the mic doesn't pick it up) while you talk.
+  video.muted = true;
+  const begin = () => {
+    video.removeEventListener('playing', begin);
+    if (!state.recording || recorder.state !== 'inactive') return;
+    recorder.start(250);
+    state.recording.startedAt = Date.now();
+    state.recording.timer = setInterval(() => {
+      const el = document.getElementById(`vostatus-${clip.id}`);
+      if (el && state.recording) el.textContent = `● Recording… ${formatTime((Date.now() - state.recording.startedAt) / 1000)}`;
+    }, 250);
+  };
+  video.addEventListener('playing', begin);
+  renderClipList();
+  try { await video.play(); } catch (e) { begin(); }
+}
+
+function buildVoiceoverLine(clip) {
+  const wrap = document.createElement('div');
+  const recordingThis = state.recording && state.recording.clipId === clip.id;
+  if (recordingThis) {
+    const stopBtn = document.createElement('button');
+    stopBtn.className = 'btn small danger';
+    stopBtn.textContent = '■ Stop';
+    stopBtn.addEventListener('click', stopVoiceover);
+    const note = document.createElement('span');
+    note.className = 'fx-note rec-note';
+    note.id = `vostatus-${clip.id}`;
+    note.textContent = '● Recording…';
+    wrap.appendChild(makeLine('Voiceover', stopBtn, note));
+    return wrap;
+  }
+  if (!clip.voiceover) {
+    const recBtn = document.createElement('button');
+    recBtn.className = 'btn small';
+    recBtn.textContent = '🎙 Record voiceover';
+    recBtn.title = 'The clip plays (muted) while you talk. Stops at the end of the clip, or press Stop.';
+    recBtn.disabled = !!state.recording;
+    recBtn.addEventListener('click', () => startVoiceover(clip));
+    wrap.appendChild(makeLine('Voiceover', recBtn));
+    return wrap;
+  }
+  const playBtn = document.createElement('button');
+  playBtn.className = 'btn small';
+  playBtn.textContent = '▶ Listen';
+  playBtn.addEventListener('click', () => {
+    const audio = new Audio(clip.voiceover.url || '');
+    audio.volume = Math.min(1, clip.voiceover.volume || 1);
+    audio.play().catch(() => setStatus('Could not play the recording.'));
+  });
+  const redoBtn = document.createElement('button');
+  redoBtn.className = 'btn small';
+  redoBtn.textContent = 'Re-record';
+  redoBtn.disabled = !!state.recording;
+  redoBtn.addEventListener('click', () => startVoiceover(clip));
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'btn small danger';
+  removeBtn.textContent = '×';
+  removeBtn.title = 'Remove the voiceover';
+  removeBtn.addEventListener('click', () => { pushUndo(); clip.voiceover = null; renderClipList(); });
+  wrap.appendChild(makeLine('Voiceover', playBtn, redoBtn, removeBtn));
+  const volNote = document.createElement('span');
+  volNote.className = 'fx-note';
+  volNote.textContent = `${Math.round((clip.voiceover.volume || 1) * 100)}%`;
+  wrap.appendChild(makeLine('Voice vol', makeSlider(0, 2, 0.05, clip.voiceover.volume || 1, (v) => {
+    clip.voiceover.volume = v;
+    volNote.textContent = `${Math.round(v * 100)}%`;
+  }), volNote));
+  return wrap;
+}
+
 // ---------- Live effects preview ----------
 // Applies the look / speed / text of the clip under the playhead to the
 // preview player, so edits can be checked without exporting.
@@ -1114,9 +1480,32 @@ function lookCss(look) {
   return parts.filter(Boolean).join(' ');
 }
 
+function frameRectFor(clip) {
+  const rect = getVideoDisplayRect();
+  if (clip && clip.aspect !== 'original' && clip.crop) {
+    return {
+      x: rect.x + clip.crop.x * rect.scale,
+      y: rect.y + clip.crop.y * rect.scale,
+      w: clip.crop.w * rect.scale,
+      h: clip.crop.h * rect.scale,
+    };
+  }
+  return { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
+}
+
 function updatePreviewFx() {
   const clip = state.editMode === 'reframe' ? null : clipUnderPlayhead();
   video.style.filter = clip ? lookCss(clip.look) : '';
+  const motion = clip && MOTION_PREVIEW[clip.motion];
+  if (motion) {
+    const progress = Math.min(1, Math.max(0, ((video.currentTime - clip.start) / (clip.speed || 1)) / clipOutputDuration(clip)));
+    const zoom = 1 + motion[0] * (motion[1] > 0 ? progress : 1 - progress);
+    const f = frameRectFor(clip);
+    video.style.transformOrigin = `${f.x + f.w / 2}px ${f.y + f.h / 2}px`;
+    video.style.transform = `scale(${zoom.toFixed(4)})`;
+  } else {
+    video.style.transform = '';
+  }
   const rate = clip ? (clip.speed || 1) : 1;
   if (video.playbackRate !== rate) video.playbackRate = rate;
   renderTextPreview(clip);
@@ -1124,20 +1513,13 @@ function updatePreviewFx() {
 
 function renderTextPreview(clip) {
   textLayer.innerHTML = '';
-  if (!clip || !clip.texts || !clip.texts.length) return;
-  const rect = getVideoDisplayRect();
+  if (!clip) return;
+  const items = [...(clip.texts || []), ...captionPreviewItems(clip)];
+  if (!items.length) return;
   // The finished frame: the crop box for reframed clips, else the whole video.
-  let frame = { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
-  if (clip.aspect !== 'original' && clip.crop) {
-    frame = {
-      x: rect.x + clip.crop.x * rect.scale,
-      y: rect.y + clip.crop.y * rect.scale,
-      w: clip.crop.w * rect.scale,
-      h: clip.crop.h * rect.scale,
-    };
-  }
+  const frame = frameRectFor(clip);
   const outTime = (video.currentTime - clip.start) / (clip.speed || 1);
-  for (const t of clip.texts) {
+  for (const t of items) {
     if (!String(t.text || '').trim() || outTime < t.start || outTime > t.end) continue;
     const el = document.createElement('div');
     el.className = `text-preview style-${t.style || 'outline'} pos-${t.position || 'bottom'}`;
@@ -1201,7 +1583,7 @@ window.addEventListener('keydown', (e) => {
   if (mod && key === 'o') { e.preventDefault(); btnOpenVideo.click(); return; }
   if (mod && key === 'z' && !typing) { e.preventDefault(); undo(); return; }
   if (typing || mod || e.altKey) return;
-  if (!promoView.classList.contains('hidden')) return;
+  if (clipEditorView.classList.contains('hidden')) return;
 
   // Keep Space from also "clicking" whichever button has focus.
   if (tag === 'button' && (key === ' ' || key === 'Enter')) e.target.blur();
@@ -1615,19 +1997,47 @@ btnExportAll.addEventListener('click', async () => {
 // ---------- Promo Video mode ----------
 const tabClipEditor = document.getElementById('tabClipEditor');
 const tabPromoVideo = document.getElementById('tabPromoVideo');
+const tabAbout = document.getElementById('tabAbout');
 const clipEditorView = document.getElementById('clipEditorView');
 const promoView = document.getElementById('promoView');
+const aboutView = document.getElementById('aboutView');
 
 function switchMode(mode) {
-  const isPromo = mode === 'promo';
-  clipEditorView.classList.toggle('hidden', isPromo);
-  promoView.classList.toggle('hidden', !isPromo);
-  tabClipEditor.classList.toggle('active', !isPromo);
-  tabPromoVideo.classList.toggle('active', isPromo);
-  if (isPromo) video.pause();
+  clipEditorView.classList.toggle('hidden', mode !== 'clip');
+  promoView.classList.toggle('hidden', mode !== 'promo');
+  aboutView.classList.toggle('hidden', mode !== 'about');
+  tabClipEditor.classList.toggle('active', mode === 'clip');
+  tabPromoVideo.classList.toggle('active', mode === 'promo');
+  tabAbout.classList.toggle('active', mode === 'about');
+  document.body.dataset.mode = mode;
+  if (mode !== 'clip') {
+    if (state.recording) stopVoiceover();
+    video.pause();
+  }
 }
 tabClipEditor.addEventListener('click', () => switchMode('clip'));
 tabPromoVideo.addEventListener('click', () => switchMode('promo'));
+tabAbout.addEventListener('click', () => switchMode('about'));
+
+// ---------- About page ----------
+async function initAbout() {
+  try {
+    const info = await window.nineJaCut.getAppInfo();
+    for (const el of document.querySelectorAll('.app-version')) el.textContent = `Version ${info.version}`;
+  } catch (e) { /* ignore */ }
+  for (const link of document.querySelectorAll('[data-external]')) {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      window.nineJaCut.openExternal(link.getAttribute('data-external'));
+    });
+  }
+  const copyBtn = document.getElementById('btnCopyEmail');
+  copyBtn.addEventListener('click', async () => {
+    await window.nineJaCut.copyText(copyBtn.dataset.copy);
+    copyBtn.textContent = 'Copied ✓';
+    setTimeout(() => { copyBtn.textContent = 'Copy email'; }, 2000);
+  });
+}
 
 const promoState = {
   templates: [],
@@ -1862,6 +2272,10 @@ async function initPromo() {
 
 initTheme();
 applyExportSettingsToUI();
+loadCaptionPrefs();
+refreshCaptionsInfo().then(() => renderClipList());
+initAbout();
+switchMode('clip');
 initStickerPicker();
 renderClipList();
 renderSourcePills();

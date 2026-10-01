@@ -72,8 +72,9 @@ async function run() {
   await js(`(() => {
     const sec = document.querySelector('.fx-section');
     const sels = sec.querySelectorAll('select');
-    sels[1].value = '0.5'; sels[1].dispatchEvent(new Event('change'));
-    sels[3].value = 'gold'; sels[3].dispatchEvent(new Event('change'));
+    // order: speed, motion, fade in, fade out, look, ...
+    sels[2].value = '0.5'; sels[2].dispatchEvent(new Event('change'));
+    sels[4].value = 'gold'; sels[4].dispatchEvent(new Event('change'));
   })()`);
   await sleep(200);
   await js(`[...document.querySelector('.fx-section').querySelectorAll('button')].find(b => b.textContent.includes('Add Text')).click()`);
