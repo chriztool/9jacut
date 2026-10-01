@@ -243,6 +243,47 @@ test('all-cut timeline uses a straight join', async () => {
   near(info.duration, 3, 0.2, 'duration');
 });
 
+// Windows paths contain "C:" and user folders can contain apostrophes,
+// commas or brackets; none of that may break the filtergraph.
+const weirdDir = path.join(outDir, "we:ird O'Brien, [dir]");
+const weirdSupported = (() => {
+  try { fs.mkdirSync(weirdDir, { recursive: true }); return true; } catch (e) { return false; }
+})();
+test('text works with colon/apostrophe/comma/bracket paths (Windows-style)', async () => {
+  const dir = weirdSupported ? weirdDir : path.join(outDir, "O'Brien, [dir]");
+  fs.mkdirSync(dir, { recursive: true });
+  const font = path.join(dir, 'Poppins-Bold.ttf');
+  fs.copyFileSync(ctx.fontPath, font);
+  const out = path.join(outDir, 'weird-paths.mp4');
+  await ex.exportClip({ ...ctx, tmpDir: path.join(dir, 'tmp'), fontPath: font }, {
+    sourcePath: src, outPath: out, hasSourceAudio: true,
+    clip: { start: 0, end: 1, texts: [{ text: 'Paths: OK', position: 'center' }] },
+  });
+  assert.ok(fs.statSync(out).size > 1000);
+});
+
+test('promo video text works with Windows-style paths', async () => {
+  const { runPromoExport } = require('../promo-export');
+  const { buildPresetList, getThemeByKey } = require('../promo-templates');
+  const dir = weirdSupported ? weirdDir : path.join(outDir, "O'Brien, [dir]");
+  const fontsDir = path.join(dir, 'fonts');
+  fs.mkdirSync(fontsDir, { recursive: true });
+  const fonts = {};
+  for (const [k, f] of [['bold', 'Poppins-Bold.ttf'], ['medium', 'Poppins-Medium.ttf'], ['regular', 'Poppins-Regular.ttf']]) {
+    fonts[k] = path.join(fontsDir, f);
+    fs.copyFileSync(path.join(__dirname, '..', 'assets', 'fonts', f), fonts[k]);
+  }
+  const preset = buildPresetList()[0];
+  const out = path.join(outDir, 'promo-weird.mp4');
+  if (ctx.hasDrawtext === false) return; // this ffmpeg can't draw text at all
+  await runPromoExport({
+    ffmpegPath, items: [{ filePath: src, type: 'video' }], layout: preset.layout, theme: getThemeByKey(preset.theme),
+    business: { name: "Mama's Kitchen: Ikeja", tagline: 'Open 7 days, 8am-10pm', hours: 'Mon-Sun', address: '12 Allen Ave, Ikeja', contact: 'IG: @mamas' },
+    durationPerItem: 2, fonts, tmpDir: path.join(dir, 'promo-tmp'), outPath: out,
+  }, () => {});
+  assert.ok(fs.statSync(out).size > 1000);
+});
+
 const sourceInfo = (p) => ex.probeMedia(ffmpegPath, p);
 const mixedClips = [
   { id: 'a', start: 0, end: 3, aspect: 'vertical', crop: { x: 656, y: 0, w: 608, h: 1080 }, texts: [{ text: 'Part 1' }] },

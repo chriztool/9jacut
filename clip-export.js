@@ -59,7 +59,12 @@ function safeFileName(name) {
 // File PATHS need escaping inside a filtergraph (Windows drive letters
 // contain a colon, and backslashes are the filter escape character).
 function escPath(p) {
-  return String(p).replace(/\\/g, '/').replace(/:/g, '\\:');
+  // Two levels of escaping (FFmpeg filtergraph docs, "Notes on filtergraph
+  // escaping"): first for the option value (\ : and '), then the whole value
+  // is single-quoted for the filtergraph so Windows drive letters ("C:"),
+  // commas and brackets in folder names can't break the graph.
+  const opt = String(p).replace(/\\/g, '/').replace(/'/g, "\\'").replace(/:/g, '\\:');
+  return `'${opt.split("'").join("'\\''")}'`;
 }
 
 function writeTextFile(tmpDir, text) {
