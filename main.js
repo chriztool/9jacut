@@ -434,3 +434,37 @@ ipcMain.handle('generate-captions', async (event, { clipId, sourcePath, start, e
     captionJob = null;
   }
 });
+
+// ---------- v2 workspace helpers ----------
+
+const VIDEO_EXTS = ['mp4', 'mov', 'mkv', 'avi', 'webm', 'm4v'];
+const AUDIO_EXTS = ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac', 'opus'];
+
+ipcMain.handle('select-videos', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Import videos',
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: 'Video files', extensions: VIDEO_EXTS }, { name: 'All files', extensions: ['*'] }],
+  });
+  if (result.canceled) return [];
+  return result.filePaths.map((filePath) => ({
+    filePath, fileUrl: url.pathToFileURL(filePath).href, fileName: path.basename(filePath),
+  }));
+});
+
+ipcMain.handle('select-audio-files', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Import music or sounds',
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: 'Audio files', extensions: AUDIO_EXTS }, { name: 'All files', extensions: ['*'] }],
+  });
+  if (result.canceled) return [];
+  return result.filePaths.map((filePath) => ({
+    filePath, fileUrl: url.pathToFileURL(filePath).href, fileName: path.basename(filePath),
+  }));
+});
+
+ipcMain.handle('probe-media', async (_event, filePath) => {
+  const info = await clipExport.probeMedia(getFfmpegPath(), filePath);
+  return { ...info, exists: fs.existsSync(filePath) };
+});

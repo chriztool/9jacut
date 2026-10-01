@@ -7,80 +7,62 @@ copy of ffmpeg.
 
 ## What it does
 
-- Open a local `.mp4` / `.mov` / `.mkv` / `.avi` file, or just drag a video
-  file onto the window.
-- Scrub the timeline, hit **Mark In** / **Mark Out** (duration shows live),
-  then **+ Add Clip** to build a list of clips. Rename clips and hand-edit
-  their start/end times directly.
-- Pick an aspect ratio per clip: **Original**, **Vertical 9:16**, **Square 1:1**,
-  **Portrait 4:5**, or **Custom** (type any W:H ratio). Click **Reframe** to drag
-  the crop box over the frame and choose what stays in shot, then **Done**.
-- **Add Audio** on any clip to import a local audio file (anything you already
-  have downloaded/exported — the app can't pull tracks directly from Spotify
-  or other streaming services, since they don't allow that) and mix it under
-  the clip with a volume slider, or check **Replace original audio** to swap
-  it out entirely.
-- **😀 Stickers** on any clip: pick a smiley/reaction from the picker, drag it
-  anywhere on the frame, and set when it appears/disappears. Baked into the
-  exported video, and correctly follows the frame if the clip is also
-  reframed to a different aspect ratio.
-- **Undo** reverses the last change — adding/deleting a clip, edits, reframe
-  drags, audio changes, sticker placement.
-- Switch between dark and light mode with the button in the top-right (dark
-  brown is the default).
-- Choose an export folder and hit **Export All Clips** — each one is cut and
-  (if reframed) cropped/scaled with ffmpeg, saved as `<name>_<aspect>.mp4`.
-- **Multiple videos per session**: open or drag in more than one source video;
-  a row of pills lets you switch which one is active, and every clip
-  remembers which video it came from (including on export).
-- **Clip thumbnails**, a **Duplicate** button per clip, and full **Save
-  Project** / **Load Project** (writes/reads a `.json` project file covering
-  every loaded video, clip, crop, audio, and sticker) so you can pick up a
-  project later without redoing anything.
-- **💬 Auto-captions** (inside ✨ Effects): one click turns the speech in a
-  clip into timed on-screen captions, using OpenAI's Whisper speech model
-  running **on your own computer** (via sherpa-onnx; no account, no upload,
-  no cost per use). Languages: auto-detect, English/Pidgin, Yoruba, Hausa,
-  French, Swahili, Arabic, Spanish, Portuguese, plus *Translate to English*.
-  Choose **Accurate** (~208 MB download) or **Fast** (~116 MB). The model
-  downloads once on first use; after that captions work offline. Every
-  line can be edited or deleted, and captions have their own style (box,
-  outline or plain; colour; size; position; ALL CAPS). Captions stay in
-  sync if you later trim the clip or change its speed.
-- **🎙 Voiceover**: record your voice with the microphone while the clip
-  plays (muted, so it doesn't echo). Listen back, re-record, and set its
-  volume; it's mixed with the video sound and any music.
-- **Motion**: slow zoom in, slow zoom out or fast zoom in across a clip.
-- **About tab**: what the app does, a how-to, shortcuts, privacy notes and
-  contact details (ogemdichris@yahoo.com).
-- **✨ Effects** on any clip (click to expand under the clip):
-  - **Speed** from 0.25x slow-mo to 4x, with the sound kept in sync.
-  - **Looks**: Vivid, Warm, Cool, Naija Gold, Cinematic, Vintage, Faded
-    film and Black & white, plus brightness / contrast / saturation sliders.
-  - **Fade in / fade out** (picture and sound together).
-  - **Text**: as many text lines as you like per clip. Pick the colour,
-    size, position (top / middle / bottom), style (outline, box or plain)
-    and when each one shows. Uses the bundled Poppins font.
-  - **Sound**: video volume slider and a *Reduce background noise* switch.
-    Imported music can **loop to fill the clip**.
-  - The preview player shows the look, speed and text live as you play,
-    so you can check edits before exporting (the look preview is a close
-    approximation; the export is the real thing).
-- **Export settings** (under the clip list): resolution (same as video,
-  720p, 1080p, 2K, 4K), quality (High / Standard), and **Join all clips
-  into one video** with a transition between clips (crossfade, fade through
-  black, dissolve, slide, wipe, circle open…). Clips of a different shape
-  sit on a blurred background instead of black bars.
-- **Keyboard shortcuts**: Space play/pause · I mark in · O mark out ·
-  Enter add clip · ←/→ jump 1s (Shift: 5s) · , / . step one frame ·
-  Home/End · Esc close editing · Ctrl+Z undo · Ctrl+S save project ·
-  Ctrl+O open video. Click **⌨ Shortcuts** to see them in the app.
-- **Promo Video tab** (top of the window): a separate "CapCut-style" business
-  promo maker. Fill in your business name/tagline/hours/address/contact, add
-  photos and/or video clips (either from files or straight from whatever's
-  loaded in the Clip Editor), then pick one of **52 named styles** — 4 base
-  layouts (Hero Card, Split Panel, Spotlight Grid, Side Strip) × 13 color
-  themes — and export a vertical 9:16 promo video with your info baked in.
+9jaCut is laid out like a professional editor: **tool tabs on the left**,
+the **player** in the middle, **Details** for the selected clip on the
+right, and a **timeline** along the bottom.
+
+### Timeline
+- Import videos in **Media** (or drag files onto the window). The first
+  videos you import go straight onto the timeline.
+- **Drag clips** to reorder them, **drag a clip's edges** to trim it, press
+  **S** (or Ctrl+B) to **split** at the playhead, **Delete** to remove,
+  **Ctrl+D** to duplicate. Undo and redo everything (Ctrl+Z / Ctrl+Y).
+- Tracks show text and stickers, captions, video and audio (music and
+  voiceover) for every clip. Zoom with the slider, Ctrl+scroll or +/−.
+- **Space** plays the whole timeline — every clip in order, with its
+  speed, look, zoom, text, captions, music and voiceover — so you see
+  and hear the finished video before exporting.
+- Click a video in Media to preview it on its own; use **Mark In (I)**,
+  **Mark Out (O)** and **Enter** to add just that part to the timeline.
+
+### Tool tabs (left)
+- **Media** — imported videos; click to preview, + or drag to add.
+- **Audio** — import music; put it under one clip or under the **whole
+  video** (the song carries on from clip to clip); record a voiceover.
+- **Text** — 8 ready-made text styles; click one to add it at the playhead.
+- **Stickers** — click to drop a sticker on the clip, then drag it.
+- **Effects** — zoom motion, fades and speed presets.
+- **Transitions** — crossfade, fade through black, dissolve, slide, wipe,
+  circle and more, chosen separately for each pair of clips.
+- **Captions** — offline auto-captions (Whisper) for one clip or all
+  clips, in 9 languages, plus caption style presets.
+- **Filters** — 8 looks with live thumbnails of your clip.
+- **Adjust** — brightness, contrast, saturation and video volume.
+- **Templates** — set the whole video to TikTok/Reels/Shorts 9:16,
+  YouTube 16:9, Instagram 1:1 or 4:5 in one click; open the promo maker.
+
+Most effect tabs act on the selected clip; tick **All clips** to apply to
+every clip at once.
+
+### Details (right)
+Everything about the selected clip in five tabs — **Video** (name, in/out,
+shape and reframe, speed, motion, fades, look, transition to the next
+clip), **Audio** (video sound, noise reduction, music, voiceover),
+**Text**, **Captions** (edit every line) and **Stickers**. With nothing
+selected it shows the project summary.
+
+### Export
+**Export** (top right, or Ctrl+E) saves the **whole timeline as one
+video** (with transitions) or **each clip as its own file**, at 720p up
+to 4K. Reframed clips are cropped exactly as the player shows them, and
+text/captions are wrapped to fit the frame exactly as in the preview.
+
+### Also
+- **Promo Video** page: 52 styles for business promo videos.
+- **About** page: guide, shortcuts, privacy and contact
+  (ogemdichris@yahoo.com).
+- Save / open projects (Menu or Ctrl+S); older 9jaCut projects still open.
+- Everything runs on your computer — no account, no watermark, no upload.
 
 ## Where 9jaCut keeps its files
 
@@ -146,7 +128,7 @@ tooling (Wine) that isn't set up here.
   slideshow of your photos/clips rather than hand-animated transitions — say
   the word if you'd like background music or extra transition styles added.
 - "+ From Loaded Videos" in the Promo tab adds every video currently open in
-  Clip Editor; remove any you don't want with the × on that item afterward.
+  the editor; remove any you don't want with the × on that item afterward.
 
 ## Project layout
 
@@ -161,8 +143,7 @@ tooling (Wine) that isn't set up here.
   captions.js       # Auto-captions: model download, speech detection, Whisper
   test/
     export-test.js  # renders real videos through every export feature (npm test)
-    ui-harness.js   # drives the real app window and takes screenshots
-    ui-captions-harness.js # same, for captions, voiceover, zoom and About
+    ui-v2-harness.js # drives the real app: import, timeline, every tab, captions, export (24 checks)
   build/
     icon.ico        # app icon
   assets/
@@ -171,5 +152,9 @@ tooling (Wine) that isn't set up here.
   renderer/
     index.html
     style.css       # dark/light theme via CSS variables
-    renderer.js     # UI logic: timeline, clips, reframe, undo, audio, stickers, effects, shortcuts, export, promo
+    renderer.js     # clip model, undo/redo, effects, captions, voiceover, reframe, stickers, promo, about
+    workspace-core.js     # media library, timeline playback engine, source preview
+    workspace-timeline.js # timeline tracks, drag to reorder/trim, split/delete/duplicate, zoom
+    workspace-panels.js   # left tool tabs (Media … Templates)
+    workspace-app.js      # Details panel, Export window, projects, menu, shortcuts, start-up
 ```

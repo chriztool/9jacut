@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld('nineJaCut', {
     ipcRenderer.on('export-progress', listener);
     return () => ipcRenderer.removeListener('export-progress', listener);
   },
+  selectVideos: () => ipcRenderer.invoke('select-videos'),
+  selectAudioFiles: () => ipcRenderer.invoke('select-audio-files'),
+  probeMedia: (filePath) => ipcRenderer.invoke('probe-media', filePath),
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
   openExternal: (target) => ipcRenderer.invoke('open-external', target),
   copyText: (text) => ipcRenderer.invoke('copy-text', text),

@@ -8,60 +8,86 @@
 <body>
   <header class="topbar">
     <div class="brand"><svg class="ng-flag" viewBox="0 0 6 3" aria-label="Nigerian flag" role="img"><title>Nigeria</title><rect width="6" height="3" fill="#008751"/><rect x="2" width="2" height="3" fill="#ffffff"/></svg><span class="brand-name"><span class="brand-nine">9ja</span>cut</span></div>
+    <div class="menu-wrap">
+      <button id="btnMenu" class="btn small menu-btn">Menu ▾</button>
+      <div id="menuDropdown" class="menu-dropdown hidden">
+        <button id="btnNewProject">New project</button>
+        <button id="btnOpenVideo">Import videos…</button>
+        <button id="btnLoadProject">Open project…</button>
+        <button id="btnSaveProject">Save project <span class="kbd-hint">Ctrl+S</span></button>
+        <hr />
+        <button id="btnShortcuts">Keyboard shortcuts</button>
+        <button id="btnMenuAbout">About 9jaCut</button>
+      </div>
+    </div>
+    <input id="projectName" class="project-name" value="Untitled project" spellcheck="false" title="Project name" />
+    <span class="spacer"></span>
     <div class="mode-tabs">
-      <button id="tabClipEditor" class="mode-tab active">Clip Editor</button>
+      <button id="tabClipEditor" class="mode-tab active">Editor</button>
       <button id="tabPromoVideo" class="mode-tab">Promo Video</button>
       <button id="tabAbout" class="mode-tab">About</button>
     </div>
     <div class="actions">
-      <button id="btnUndo" class="btn" disabled title="Undo last change (Ctrl+Z)">↶ Undo</button>
-      <button id="btnShortcuts" class="btn small" title="Keyboard shortcuts">⌨ Shortcuts</button>
-      <button id="btnOpenVideo" class="btn">Open Video</button>
-      <span id="fileName" class="filename">No video loaded</span>
-      <button id="btnSaveProject" class="btn small">Save Project</button>
-      <button id="btnLoadProject" class="btn small">Load Project</button>
-      <span class="spacer"></span>
-      <button id="btnExportFolder" class="btn">Choose Export Folder</button>
-      <span id="exportFolderLabel" class="filename">No folder chosen</span>
-      <button id="btnExportAll" class="btn primary" disabled>Export All Clips</button>
+      <button id="btnUndo" class="btn icon-btn" disabled title="Undo (Ctrl+Z)"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
+      <button id="btnRedo" class="btn icon-btn" disabled title="Redo (Ctrl+Y)"><svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg></button>
       <button id="btnThemeToggle" class="btn round theme-toggle" title="Switch theme">🌙</button>
+      <button id="btnExportOpen" class="btn primary export-btn" title="Export your video">⤓ Export</button>
     </div>
   </header>
 
-  <div id="clipEditorView">
-  <div id="sourceRow" class="source-row hidden">
-    <span class="source-row-label">Videos:</span>
-    <div id="sourcePills" class="source-pills"></div>
-  </div>
+  <div id="clipEditorView" class="workspace">
+    <section class="panel left-panel">
+      <nav class="tool-tabs" id="toolTabs">
+        <button data-tab="media" class="active"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></svg><span>Media</span></button>
+        <button data-tab="audio"><svg viewBox="0 0 24 24"><path d="M9 18V6l11-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg><span>Audio</span></button>
+        <button data-tab="text"><svg viewBox="0 0 24 24"><path d="M5 6V4h14v2"/><path d="M12 4v16"/><path d="M9 20h6"/></svg><span>Text</span></button>
+        <button data-tab="stickers"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4 4 0 0 0 7 0"/><path d="M9 9.5h.01M15 9.5h.01"/></svg><span>Stickers</span></button>
+        <button data-tab="effects"><svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><path d="m6 6 2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/></svg><span>Effects</span></button>
+        <button data-tab="transitions"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="10" height="12" rx="1.5"/><rect x="11" y="6" width="10" height="12" rx="1.5"/></svg><span>Transitions</span></button>
+        <button data-tab="captions"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 13h4M13 13h4M7 16h10"/></svg><span>Captions</span></button>
+        <button data-tab="filters"><svg viewBox="0 0 24 24"><circle cx="9" cy="10" r="5"/><circle cx="15" cy="10" r="5"/><circle cx="12" cy="15" r="5"/></svg><span>Filters</span></button>
+        <button data-tab="adjust"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span>Adjust</span></button>
+        <button data-tab="templates"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="10" rx="1.5"/><rect x="13" y="3" width="8" height="6" rx="1.5"/><rect x="13" y="11" width="8" height="10" rx="1.5"/><rect x="3" y="15" width="8" height="6" rx="1.5"/></svg><span>Templates</span></button>
+      </nav>
+      <div class="left-body" id="leftBody"></div>
+    </section>
 
-  <main class="layout">
-    <section class="player-pane">
+    <section class="panel player-panel">
+      <div class="panel-head">
+        <span id="playerTitle">Player · Timeline</span>
+        <span class="spacer"></span>
+        <button id="btnBackToTimeline" class="btn small hidden">← Back to timeline</button>
+      </div>
       <div class="video-stage" id="videoStage">
         <video id="preview"></video>
-        <div id="dropHint" class="drop-hint">Drag a video here, or click "Open Video"</div>
+        <div id="dropHint" class="drop-hint">Import a video to start: click <strong>Import</strong> on the left, or drag a video file here</div>
         <div id="cropOverlay" class="crop-overlay hidden">
           <div class="crop-handle a"></div>
           <div class="crop-handle b"></div>
         </div>
+        <div id="frameMask" class="frame-mask hidden"></div>
         <div id="textLayer" class="text-layer"></div>
         <div id="stickerLayer" class="sticker-layer"></div>
         <div id="reframeBadge" class="reframe-badge hidden">Reframing: drag the box to choose what stays in shot</div>
         <div id="stickerBadge" class="reframe-badge hidden">Stickers: drag to position, pick more below</div>
       </div>
 
-      <div class="transport">
-        <button id="btnPlayPause" class="btn round">▶</button>
+      <div class="player-controls">
+        <span id="timeLabel" class="time-label"><span class="tc-now">00:00.0</span> / 00:00.0</span>
         <input id="seekBar" type="range" min="0" max="1000" value="0" step="1" />
-        <span id="timeLabel" class="time-label">00:00 / 00:00</span>
+        <button id="btnPlayPause" class="btn round play-btn" title="Play / pause (Space)">▶</button>
+        <button id="btnFullscreen" class="btn small icon-btn" title="Full screen preview"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
       </div>
 
-      <div class="mark-row">
-        <button id="btnMarkIn" class="btn" title="Shortcut: I">Mark In</button>
+      <div class="mark-row hidden" id="sourceMarkRow">
+        <button id="btnMarkIn" class="btn small" title="Shortcut: I">Mark In</button>
         <span id="inLabel" class="mark-label">In: --:--</span>
-        <button id="btnMarkOut" class="btn" title="Shortcut: O">Mark Out</button>
+        <button id="btnMarkOut" class="btn small" title="Shortcut: O">Mark Out</button>
         <span id="outLabel" class="mark-label">Out: --:--</span>
         <span id="durationLabel" class="mark-label">Duration: --:--</span>
-        <button id="btnAddClip" class="btn primary" disabled title="Shortcut: Enter">+ Add Clip</button>
+        <span class="spacer"></span>
+        <button id="btnAddWhole" class="btn small">+ Whole video</button>
+        <button id="btnAddClip" class="btn small primary" disabled title="Shortcut: Enter">+ Add to timeline</button>
       </div>
 
       <div class="reframe-controls hidden" id="reframeControls">
@@ -77,56 +103,45 @@
       </div>
     </section>
 
-    <aside class="clip-pane">
-      <h2>Clips <span id="clipCount">(0)</span></h2>
-      <div id="clipList" class="clip-list"></div>
-      <div class="export-settings">
-        <h3>Export settings</h3>
-        <div class="setting-row">
-          <label>Resolution
-            <select id="setResolution">
-              <option value="source">Same as video</option>
-              <option value="720">720p (smaller file)</option>
-              <option value="1080">1080p HD</option>
-              <option value="1440">1440p 2K</option>
-              <option value="2160">2160p 4K</option>
-            </select>
-          </label>
-          <label>Quality
-            <select id="setQuality">
-              <option value="high">High</option>
-              <option value="standard">Standard (smaller)</option>
-            </select>
-          </label>
+    <section class="panel right-panel">
+      <div class="panel-head"><span id="propsTitle">Details</span></div>
+      <div class="props-tabs hidden" id="propsTabs"></div>
+      <div class="props-body" id="propsBody"></div>
+    </section>
+
+    <section class="panel timeline-panel">
+      <div class="tl-toolbar">
+        <button id="tlSplit" class="btn icon-btn" title="Split at playhead (S or Ctrl+B)"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/></svg></button>
+        <button id="tlDelete" class="btn icon-btn" title="Delete selected clip (Delete)"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
+        <button id="tlDuplicate" class="btn icon-btn" title="Duplicate selected clip (Ctrl+D)"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg></button>
+        <button id="tlReframe" class="btn small" title="Choose what stays in shot">Reframe</button>
+        <span class="tl-info" id="tlInfo"></span>
+        <span class="spacer"></span>
+        <button id="tlZoomOut" class="btn icon-btn" title="Zoom out"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4M8 11h6"/></svg></button>
+        <input id="tlZoom" type="range" min="10" max="300" value="60" title="Timeline zoom" />
+        <button id="tlZoomIn" class="btn icon-btn" title="Zoom in"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4M8 11h6M11 8v6"/></svg></button>
+        <button id="tlFit" class="btn small" title="Fit the whole timeline">Fit</button>
+      </div>
+      <div class="tl-body">
+        <div class="tl-heads">
+          <div class="tl-head ruler-head"></div>
+          <div class="tl-head" title="Text and stickers">T</div>
+          <div class="tl-head" title="Captions">💬</div>
+          <div class="tl-head main-head" title="Video">🎞</div>
+          <div class="tl-head" title="Music and voiceover">♪</div>
         </div>
-        <label class="check-row"><input type="checkbox" id="setCombine" /> Join all clips into one video</label>
-        <div id="combineOptions" class="setting-row hidden">
-          <label>Transition
-            <select id="setTransition">
-              <option value="none">None (straight cut)</option>
-              <option value="fade">Crossfade</option>
-              <option value="fadeblack">Fade through black</option>
-              <option value="dissolve">Dissolve</option>
-              <option value="slideleft">Slide left</option>
-              <option value="slideup">Slide up</option>
-              <option value="wipeleft">Wipe</option>
-              <option value="smoothleft">Smooth slide</option>
-              <option value="circleopen">Circle open</option>
-            </select>
-          </label>
-          <label>Length
-            <select id="setTransitionDur">
-              <option value="0.3">0.3s</option>
-              <option value="0.5">0.5s</option>
-              <option value="1">1s</option>
-            </select>
-          </label>
-          <input id="setCombinedName" class="clip-time combined-name" placeholder="Video name" />
+        <div class="tl-scroll" id="tlScroll">
+          <div class="tl-content" id="tlContent">
+            <div class="tl-ruler" id="tlRuler"></div>
+            <div class="tl-lane lane-overlay" id="laneOverlay"></div>
+            <div class="tl-lane lane-captions" id="laneCaptions"></div>
+            <div class="tl-lane lane-main" id="laneMain"><div class="tl-empty" id="tlEmpty">Your clips go here. Import a video, then add it to the timeline.</div></div>
+            <div class="tl-lane lane-audio" id="laneAudio"></div>
+            <div class="tl-playhead" id="tlPlayhead"><div class="tl-playhead-knob"></div></div>
+          </div>
         </div>
       </div>
-      <p class="hint">Mark In / Mark Out on the video, then Add Clip. Pick an aspect ratio to crop &amp; reframe a clip for posting, or leave it Original. Add your own audio file under a clip to mix it in or replace the original sound. Open <strong>✨ Effects</strong> on a clip for auto-captions, text, speed, looks, zoom, fades and voiceover.</p>
-    </aside>
-  </main>
+    </section>
   </div>
 
   <main class="promo-layout hidden" id="promoView">
@@ -199,14 +214,15 @@
       <section>
         <h2>Features</h2>
         <div class="about-grid">
-          <div class="about-card"><h3>✂️ Cut &amp; reframe</h3><p>Mark in and out to cut clips. Reframe any clip to vertical 9:16, square, 4:5 or your own shape, and drag to choose what stays in shot.</p></div>
+          <div class="about-card"><h3>🎞 Timeline editing</h3><p>A real timeline: drag clips to reorder them, drag their edges to trim, split at the playhead, and play the whole video with its music before you export.</p></div>
+          <div class="about-card"><h3>✂️ Cut &amp; reframe</h3><p>Pick just part of a video with Mark In / Mark Out. Set the whole video to TikTok 9:16, YouTube 16:9, square or 4:5 in one click, and drag to choose what stays in shot.</p></div>
           <div class="about-card"><h3>💬 Auto-captions</h3><p>Turns speech into on-screen captions automatically. Works in English and Pidgin, Yoruba, Hausa and more, with an option to translate into English. Fix any word before you export.</p></div>
           <div class="about-card"><h3>🔤 Text</h3><p>Add titles and messages with your own colour, size, position and style (outline, box or plain), and choose when each one appears.</p></div>
           <div class="about-card"><h3>🎨 Looks</h3><p>Eight colour looks including Naija Gold, Cinematic and Black &amp; white, plus brightness, contrast and saturation.</p></div>
           <div class="about-card"><h3>⚡ Speed &amp; motion</h3><p>Slow-mo down to 0.25x or fast-forward up to 4x, plus smooth zoom-in and zoom-out effects.</p></div>
           <div class="about-card"><h3>🎵 Sound</h3><p>Add your own music (it can loop to fill the clip), record a voiceover with your microphone, adjust volumes and reduce background noise.</p></div>
           <div class="about-card"><h3>😀 Stickers</h3><p>Drop emoji stickers anywhere on the video and set when they show.</p></div>
-          <div class="about-card"><h3>🎬 One finished video</h3><p>Join all your clips into one video with transitions such as crossfade, slide, wipe or circle. Clips of a different shape sit on a blurred background.</p></div>
+          <div class="about-card"><h3>🎬 Transitions</h3><p>Choose a different transition between each pair of clips: crossfade, fade through black, slide, wipe, circle and more.</p></div>
           <div class="about-card"><h3>🏪 Promo videos</h3><p>Fill in your business name, hours, address and contact, add photos, pick one of 52 styles and export a vertical promo video.</p></div>
           <div class="about-card"><h3>💾 Projects &amp; export</h3><p>Save and reopen projects, undo any change, and export from 720p up to 4K.</p></div>
         </div>
@@ -215,24 +231,25 @@
       <section>
         <h2>How to make a video</h2>
         <ol class="about-steps">
-          <li>Click <strong>Open Video</strong> (or drag a video onto the window).</li>
-          <li>Play to the start of a good moment and press <strong>Mark In</strong> (or <kbd>I</kbd>), then play to the end and press <strong>Mark Out</strong> (<kbd>O</kbd>).</li>
-          <li>Click <strong>+ Add Clip</strong> (<kbd>Enter</kbd>). Repeat for every moment you want.</li>
-          <li>On each clip, pick a shape (for example <em>Vertical 9:16</em>) and click <strong>Reframe</strong> to choose what stays in shot.</li>
-          <li>Open <strong>✨ Effects</strong> on a clip for captions, text, speed, looks, zoom, fades, music and voiceover. The player shows your changes as you play.</li>
-          <li>Under <strong>Export settings</strong>, choose the resolution, and tick <em>Join all clips into one video</em> if you want a single video.</li>
-          <li>Click <strong>Choose Export Folder</strong>, then <strong>Export</strong>. The folder opens when it's done.</li>
+          <li>Click <strong>Import videos</strong> in the <strong>Media</strong> tab (or drag video files onto the window). Your first videos go straight onto the timeline at the bottom.</li>
+          <li>Trim: drag the edges of a clip on the timeline. Cut: move the red playhead and press <kbd>S</kbd> to split, then <kbd>Delete</kbd> the part you don't want. Drag clips to change their order.</li>
+          <li>To add just part of a video, click it in Media, press <kbd>I</kbd> at the start and <kbd>O</kbd> at the end, then <kbd>Enter</kbd>.</li>
+          <li>Use the tabs on the left — Audio, Text, Stickers, Effects, Transitions, Captions, Filters, Adjust and Templates — to style your video.</li>
+          <li>Click a clip to see and change all its settings in <strong>Details</strong> on the right.</li>
+          <li>Press <strong>Space</strong> to watch the whole video, then click <strong>Export</strong> (top right).</li>
         </ol>
       </section>
 
       <section>
         <h2>Keyboard shortcuts</h2>
         <table class="about-keys">
-          <tr><td><kbd>Space</kbd></td><td>Play / pause</td><td><kbd>I</kbd> / <kbd>O</kbd></td><td>Mark in / mark out</td></tr>
-          <tr><td><kbd>Enter</kbd></td><td>Add clip</td><td><kbd>←</kbd> / <kbd>→</kbd></td><td>Jump 1 second (Shift: 5 seconds)</td></tr>
-          <tr><td><kbd>,</kbd> / <kbd>.</kbd></td><td>Step one frame</td><td><kbd>Home</kbd> / <kbd>End</kbd></td><td>Go to start / end</td></tr>
-          <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo</td><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save project</td></tr>
-          <tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>Open video</td><td><kbd>Esc</kbd></td><td>Close reframe / sticker editing</td></tr>
+          <tr><td><kbd>Space</kbd></td><td>Play / pause</td><td><kbd>S</kbd> or <kbd>Ctrl</kbd>+<kbd>B</kbd></td><td>Split at the playhead</td></tr>
+          <tr><td><kbd>Delete</kbd></td><td>Delete selected clip</td><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Duplicate selected clip</td></tr>
+          <tr><td><kbd>←</kbd> / <kbd>→</kbd></td><td>Move 1 second (Shift: 5)</td><td><kbd>,</kbd> / <kbd>.</kbd></td><td>Step one frame</td></tr>
+          <tr><td><kbd>+</kbd> / <kbd>−</kbd></td><td>Zoom the timeline</td><td><kbd>Home</kbd> / <kbd>End</kbd></td><td>Go to start / end</td></tr>
+          <tr><td><kbd>I</kbd> / <kbd>O</kbd> / <kbd>Enter</kbd></td><td>Mark in / out / add (in preview)</td><td><kbd>Esc</kbd></td><td>Close / back to timeline</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo</td><td><kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Redo</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save project</td><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Export</td></tr>
         </table>
       </section>
 
@@ -268,8 +285,55 @@
     </div>
   </main>
 
+  <div class="modal-backdrop hidden" id="exportDialog">
+    <div class="modal">
+      <div class="modal-head"><h2>Export</h2><button id="btnExportClose" class="btn small icon-btn" title="Close">✕</button></div>
+      <label class="modal-field">Name
+        <input id="setCombinedName" class="modal-input" placeholder="my-video" />
+      </label>
+      <div class="modal-field">Save to
+        <div class="folder-row">
+          <span id="exportFolderLabel" class="folder-label">No folder chosen</span>
+          <button id="btnExportFolder" class="btn small">Choose folder…</button>
+        </div>
+      </div>
+      <div class="modal-grid">
+        <label class="modal-field">Resolution
+          <select id="setResolution">
+            <option value="source">Same as video</option>
+            <option value="720">720p (smaller file)</option>
+            <option value="1080">1080p HD</option>
+            <option value="1440">1440p 2K</option>
+            <option value="2160">2160p 4K</option>
+          </select>
+        </label>
+        <label class="modal-field">Quality
+          <select id="setQuality">
+            <option value="high">High</option>
+            <option value="standard">Standard (smaller)</option>
+          </select>
+        </label>
+      </div>
+      <div class="modal-field">Export as
+        <label class="radio-row"><input type="radio" name="exportMode" value="combined" id="setModeCombined" checked /> One video — the whole timeline with transitions</label>
+        <label class="radio-row"><input type="radio" name="exportMode" value="separate" id="setModeSeparate" /> Separate files — each clip on its own</label>
+      </div>
+      <div class="modal-summary" id="exportSummary"></div>
+      <div class="progress-bar" id="exportProgressBar"><div class="progress-fill"></div></div>
+      <div class="modal-status" id="exportStatus"></div>
+      <div class="modal-actions">
+        <button id="btnExportCancel" class="btn">Close</button>
+        <button id="btnExportAll" class="btn primary" disabled>Export</button>
+      </div>
+    </div>
+  </div>
+
   <footer id="statusBar" class="statusbar"></footer>
 
   <script src="renderer.js"></script>
+  <script src="workspace-core.js"></script>
+  <script src="workspace-timeline.js"></script>
+  <script src="workspace-panels.js"></script>
+  <script src="workspace-app.js"></script>
 </body>
 </html>

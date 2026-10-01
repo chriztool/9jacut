@@ -208,6 +208,41 @@ test('voiceover alone on a silent video', async () => {
   near(info.duration, 3, 0.15, 'duration');
 });
 
+test('music offset continues a song across a split', async () => {
+  const out = path.join(outDir, 'music-offset.mp4');
+  await ex.exportClip(ctx, {
+    sourcePath: silent, outPath: out, hasSourceAudio: false,
+    clip: { start: 0, end: 2, audio: { path: music, volume: 1, loop: true, offset: 1.5 }, voiceover: { path: voice, offset: 1 } },
+  });
+  const info = await ex.probeMedia(ffmpegPath, out);
+  near(info.duration, 2, 0.15, 'duration');
+  assert.ok(info.hasAudio);
+});
+
+test('per-clip transitions (slide, cut, circle) in one video', async () => {
+  const out = path.join(outDir, 'per-clip-transitions.mp4');
+  const clips = [
+    { id: 'p1', sourcePath: src, start: 0, end: 2, transitionOut: { type: 'slideleft', duration: 0.5 } },
+    { id: 'p2', sourcePath: src, start: 2, end: 4, transitionOut: { type: 'none' } },
+    { id: 'p3', sourcePath: src, start: 4, end: 6, transitionOut: { type: 'circleopen', duration: 1 } },
+    { id: 'p4', sourcePath: src, start: 6, end: 8 },
+  ];
+  await ex.exportCombined(ctx, { clips, settings: { resolution: '720' }, outPath: out, sourceInfo: (p) => ex.probeMedia(ffmpegPath, p) }, () => {});
+  const info = await ex.probeMedia(ffmpegPath, out);
+  near(info.duration, 8 - 0.5 - 0.034 - 1, 0.25, 'duration');
+});
+
+test('all-cut timeline uses a straight join', async () => {
+  const out = path.join(outDir, 'all-cuts.mp4');
+  const clips = [
+    { id: 'c1', sourcePath: src, start: 0, end: 1.5, transitionOut: { type: 'none' } },
+    { id: 'c2', sourcePath: silent, start: 0, end: 1.5 },
+  ];
+  await ex.exportCombined(ctx, { clips, settings: {}, outPath: out, sourceInfo: (p) => ex.probeMedia(ffmpegPath, p) }, () => {});
+  const info = await ex.probeMedia(ffmpegPath, out);
+  near(info.duration, 3, 0.2, 'duration');
+});
+
 const sourceInfo = (p) => ex.probeMedia(ffmpegPath, p);
 const mixedClips = [
   { id: 'a', start: 0, end: 3, aspect: 'vertical', crop: { x: 656, y: 0, w: 608, h: 1080 }, texts: [{ text: 'Part 1' }] },

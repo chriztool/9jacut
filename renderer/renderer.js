@@ -3,12 +3,14 @@ const ASPECT_PRESETS = {
   vertical: { w: 9, h: 16, label: 'Vertical 9:16' },
   square: { w: 1, h: 1, label: 'Square 1:1' },
   portrait: { w: 4, h: 5, label: 'Portrait 4:5' },
+  landscape: { w: 16, h: 9, label: 'Landscape 16:9' },
 };
 const ASPECT_OPTIONS = [
   ['original', 'Original'],
   ['vertical', ASPECT_PRESETS.vertical.label],
   ['square', ASPECT_PRESETS.square.label],
   ['portrait', ASPECT_PRESETS.portrait.label],
+  ['landscape', ASPECT_PRESETS.landscape.label],
   ['custom', 'Custom'],
 ];
 
@@ -91,8 +93,8 @@ const state = {
   exportSettings: {
     resolution: 'source',
     quality: 'high',
-    combine: false,
-    transition: 'fade',
+    combine: true,
+    transition: 'none',
     transitionDuration: 0.5,
     combinedName: '',
   },
@@ -110,6 +112,7 @@ function normalizeClip(clip) {
   if (!MOTION_PREVIEW[clip.motion]) clip.motion = 'none';
   if (clip.captions === undefined) clip.captions = null;
   if (clip.voiceover === undefined) clip.voiceover = null;
+  if (!clip.transitionOut || typeof clip.transitionOut !== 'object') clip.transitionOut = { type: 'none', duration: 0.5 };
   if (clip.audio && typeof clip.audio.loop !== 'boolean') clip.audio.loop = true;
   return clip;
 }
@@ -141,11 +144,16 @@ function cloneClips(clips) {
     : JSON.parse(JSON.stringify(clips));
 }
 
+const redoStack = [];
+
 function updateUndoButton() {
   btnUndo.disabled = undoStack.length === 0;
+  const btnRedoEl = document.getElementById('btnRedo');
+  if (btnRedoEl) btnRedoEl.disabled = redoStack.length === 0;
 }
 
 function pushUndo() {
+  redoStack.length = 0;
   undoStack.push(cloneClips(state.clips));
   if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
   state.pendingSnapshot = null;
@@ -158,6 +166,7 @@ function armSnapshot() {
 
 function commitSnapshotIfArmed() {
   if (state.pendingSnapshot) {
+    redoStack.length = 0;
     undoStack.push(state.pendingSnapshot);
     if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
     state.pendingSnapshot = null;
@@ -167,6 +176,7 @@ function commitSnapshotIfArmed() {
 
 function undo() {
   if (!undoStack.length) return;
+  redoStack.push(cloneClips(state.clips));
   state.clips = undoStack.pop();
   if (state.selectedClipId && !state.clips.find((c) => c.id === state.selectedClipId)) {
     exitEditModes();
@@ -177,6 +187,16 @@ function undo() {
   updatePreviewFx();
   updateUndoButton();
   setStatus('Undid last change');
+}
+
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push(cloneClips(state.clips));
+  state.clips = redoStack.pop();
+  renderClipList();
+  updatePreviewFx();
+  updateUndoButton();
+  setStatus('Redid change');
 }
 
 // ---------- Element refs ----------
@@ -197,11 +217,8 @@ const btnDoneStickers = document.getElementById('btnDoneStickers');
 const btnUndo = document.getElementById('btnUndo');
 const btnThemeToggle = document.getElementById('btnThemeToggle');
 const btnOpenVideo = document.getElementById('btnOpenVideo');
-const fileNameEl = document.getElementById('fileName');
 const btnSaveProject = document.getElementById('btnSaveProject');
 const btnLoadProject = document.getElementById('btnLoadProject');
-const sourceRow = document.getElementById('sourceRow');
-const sourcePills = document.getElementById('sourcePills');
 const btnExportFolder = document.getElementById('btnExportFolder');
 const exportFolderLabel = document.getElementById('exportFolderLabel');
 const btnExportAll = document.getElementById('btnExportAll');
@@ -220,17 +237,11 @@ const btnAddClip = document.getElementById('btnAddClip');
 const btnResetCrop = document.getElementById('btnResetCrop');
 const btnDoneReframe = document.getElementById('btnDoneReframe');
 
-const clipList = document.getElementById('clipList');
 const textLayer = document.getElementById('textLayer');
 const btnShortcuts = document.getElementById('btnShortcuts');
 const setResolution = document.getElementById('setResolution');
 const setQuality = document.getElementById('setQuality');
-const setCombine = document.getElementById('setCombine');
-const combineOptions = document.getElementById('combineOptions');
-const setTransition = document.getElementById('setTransition');
-const setTransitionDur = document.getElementById('setTransitionDur');
 const setCombinedName = document.getElementById('setCombinedName');
-const clipCount = document.getElementById('clipCount');
 const statusBar = document.getElementById('statusBar');
 
 // ---------- Theme ----------
@@ -285,9 +296,16 @@ function getRatioForClip(clip) {
   return ASPECT_PRESETS[clip.aspect] || null;
 }
 
-function defaultCropForRatio(rw, rh) {
-  const vw = state.videoWidth || 1920;
-  const vh = state.videoHeight || 1080;
+function sourceDims(sourcePath) {
+  const src = state.sources.find((s) => s.path === sourcePath);
+  if (src && src.width && src.height) return { w: src.width, h: src.height };
+  if (sourcePath === state.activeSourcePath && state.videoWidth) return { w: state.videoWidth, h: state.videoHeight };
+  return { w: 1920, h: 1080 };
+}
+
+function defaultCropForRatio(rw, rh, dims) {
+  const vw = (dims && dims.w) || state.videoWidth || 1920;
+  const vh = (dims && dims.h) || state.videoHeight || 1080;
   const sourceAspect = vw / vh;
   const targetAspect = rw / rh;
   let w = vw;
@@ -312,7 +330,7 @@ function ensureCropForClip(clip) {
   if (clip.aspect === 'original') return;
   if (clip.aspect === 'custom' && !clip.customRatio) clip.customRatio = { w: 16, h: 9 };
   const ratio = getRatioForClip(clip);
-  clip.crop = defaultCropForRatio(ratio.w, ratio.h);
+  clip.crop = defaultCropForRatio(ratio.w, ratio.h, sourceDims(clip.sourcePath));
 }
 
 function getCropAxis(clip) {
@@ -356,13 +374,10 @@ function switchActiveSource(sourcePath) {
     const source = state.sources.find((s) => s.path === sourcePath);
     if (!source) { resolve(); return; }
     if (state.activeSourcePath === sourcePath && video.currentSrc) {
-      renderSourcePills();
       resolve();
       return;
     }
     state.activeSourcePath = sourcePath;
-    fileNameEl.textContent = source.name;
-    fileNameEl.title = source.path;
     dropHint.classList.add('hidden');
     const onLoaded = () => {
       video.removeEventListener('loadedmetadata', onLoaded);
@@ -370,24 +385,7 @@ function switchActiveSource(sourcePath) {
     };
     video.addEventListener('loadedmetadata', onLoaded);
     video.src = source.url;
-    renderSourcePills();
   });
-}
-
-function renderSourcePills() {
-  sourcePills.innerHTML = '';
-  sourceRow.classList.toggle('hidden', state.sources.length === 0);
-  for (const src of state.sources) {
-    const pill = document.createElement('button');
-    pill.className = 'source-pill' + (src.path === state.activeSourcePath ? ' active' : '');
-    pill.textContent = src.name;
-    pill.title = src.path;
-    pill.addEventListener('click', async () => {
-      await switchActiveSource(src.path);
-      resetMarks();
-    });
-    sourcePills.appendChild(pill);
-  }
 }
 
 async function loadVideo(filePath, fileUrl, fileName) {
@@ -396,31 +394,6 @@ async function loadVideo(filePath, fileUrl, fileName) {
   resetMarks();
   setStatus(`Loaded ${fileName}`);
 }
-
-btnOpenVideo.addEventListener('click', async () => {
-  const result = await window.nineJaCut.selectVideo();
-  if (!result) return;
-  await loadVideo(result.filePath, result.fileUrl, result.fileName);
-});
-
-// Drag-and-drop a video file straight onto the app window.
-window.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  videoStage.classList.add('drag-active');
-});
-window.addEventListener('dragleave', (e) => {
-  if (e.target === document.documentElement || e.target === document.body) {
-    videoStage.classList.remove('drag-active');
-  }
-});
-window.addEventListener('drop', async (e) => {
-  e.preventDefault();
-  videoStage.classList.remove('drag-active');
-  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-  if (!file || !file.path) return;
-  const fileUrl = await window.nineJaCut.toFileUrl(file.path);
-  await loadVideo(file.path, fileUrl, file.name);
-});
 
 video.addEventListener('loadedmetadata', () => {
   state.videoWidth = video.videoWidth;
@@ -431,39 +404,6 @@ video.addEventListener('loadedmetadata', () => {
 video.addEventListener('error', () => {
   if (state.activeSourcePath) {
     setStatus('This format won’t preview inline (try converting to .mp4), but you can still export it once you set times manually.');
-  }
-});
-
-// ---------- Transport ----------
-btnPlayPause.addEventListener('click', () => {
-  if (video.paused) video.play(); else video.pause();
-});
-video.addEventListener('play', () => { btnPlayPause.textContent = '⏸'; });
-video.addEventListener('pause', () => { btnPlayPause.textContent = '▶'; });
-
-function updateTimeLabel() {
-  timeLabel.textContent = `${formatTime(video.currentTime)} / ${formatTime(video.duration || 0)}`;
-}
-
-video.addEventListener('timeupdate', () => {
-  if (!state.scrubbing && video.duration) {
-    seekBar.value = String(Math.round((video.currentTime / video.duration) * 1000));
-  }
-  updateTimeLabel();
-  if (state.editMode === 'reframe') positionCropOverlay();
-  if (state.editMode === 'stickers') positionStickerLayer();
-  if (state.recording) {
-    const recClip = state.clips.find((c) => c.id === state.recording.clipId);
-    if (!recClip || video.currentTime >= recClip.end - 0.05) stopVoiceover();
-  }
-  updatePreviewFx();
-});
-
-seekBar.addEventListener('pointerdown', () => { state.scrubbing = true; });
-seekBar.addEventListener('pointerup', () => { state.scrubbing = false; });
-seekBar.addEventListener('input', () => {
-  if (video.duration) {
-    video.currentTime = (Number(seekBar.value) / 1000) * video.duration;
   }
 });
 
@@ -494,8 +434,7 @@ function refreshThumbnail(clip) {
   window.nineJaCut.generateThumbnail({ sourcePath: clip.sourcePath, time: clip.start }).then((fileUrl) => {
     if (!fileUrl) return;
     clip.thumbUrl = fileUrl;
-    const imgEl = document.getElementById(`thumb-${clip.id}`);
-    if (imgEl) imgEl.src = fileUrl;
+    if (typeof renderTimeline === 'function') renderTimeline();
   }).catch(() => {});
 }
 
@@ -521,333 +460,9 @@ btnAddClip.addEventListener('click', () => {
   resetMarks();
   renderClipList();
   refreshThumbnail(clip);
-  setStatus(`Added ${clip.name}`);
+  afterClipAdded(clip);
+  setStatus(`Added ${clip.name} to the timeline`);
 });
-
-// ---------- Clip list ----------
-function renderClipList() {
-  clipList.innerHTML = '';
-  clipCount.textContent = `(${state.clips.length})`;
-  btnExportAll.disabled = !(state.clips.length > 0 && state.exportFolder);
-
-  for (const clip of state.clips) {
-    normalizeClip(clip);
-    const card = document.createElement('div');
-    card.className = 'clip-card' + (state.selectedClipId === clip.id ? ' selected' : '');
-
-    // Row 1: thumbnail + name + delete
-    const row1 = document.createElement('div');
-    row1.className = 'clip-row1';
-    const thumbImg = document.createElement('img');
-    thumbImg.className = 'clip-thumb';
-    thumbImg.id = `thumb-${clip.id}`;
-    if (clip.thumbUrl) thumbImg.src = clip.thumbUrl;
-    thumbImg.alt = '';
-    const nameInput = document.createElement('input');
-    nameInput.className = 'clip-name';
-    nameInput.value = clip.name;
-    nameInput.addEventListener('change', () => {
-      pushUndo();
-      clip.name = nameInput.value || clip.name;
-    });
-    const delBtn = document.createElement('button');
-    delBtn.className = 'btn small danger';
-    delBtn.textContent = 'Delete';
-    delBtn.addEventListener('click', () => {
-      pushUndo();
-      state.clips = state.clips.filter((c) => c.id !== clip.id);
-      if (state.selectedClipId === clip.id) exitEditModes();
-      renderClipList();
-    });
-    row1.appendChild(thumbImg);
-    row1.appendChild(nameInput);
-    row1.appendChild(delBtn);
-
-    // Row 2: times + duration + aspect select (+ custom ratio)
-    const row2 = document.createElement('div');
-    row2.className = 'clip-row2';
-    const startInput = document.createElement('input');
-    startInput.className = 'clip-time';
-    startInput.value = formatTime(clip.start);
-    startInput.addEventListener('change', () => {
-      pushUndo();
-      clip.start = Math.max(0, parseTimeInput(startInput.value, clip.start));
-      startInput.value = formatTime(clip.start);
-      durInput.textContent = formatTime(clip.end - clip.start);
-      refreshThumbnail(clip);
-    });
-    const toLabel = document.createElement('span');
-    toLabel.textContent = '→';
-    const endInput = document.createElement('input');
-    endInput.className = 'clip-time';
-    endInput.value = formatTime(clip.end);
-    endInput.addEventListener('change', () => {
-      pushUndo();
-      clip.end = Math.max(clip.start + 0.1, parseTimeInput(endInput.value, clip.end));
-      endInput.value = formatTime(clip.end);
-      durInput.textContent = formatTime(clip.end - clip.start);
-    });
-    const durInput = document.createElement('span');
-    durInput.className = 'clip-time';
-    durInput.style.background = 'transparent';
-    durInput.style.border = 'none';
-    durInput.title = 'Clip duration';
-    durInput.textContent = formatTime(clip.end - clip.start);
-
-    const aspectSelect = document.createElement('select');
-    aspectSelect.className = 'aspect-select';
-    for (const [val, label] of ASPECT_OPTIONS) {
-      const opt = document.createElement('option');
-      opt.value = val;
-      opt.textContent = label;
-      if (clip.aspect === val) opt.selected = true;
-      aspectSelect.appendChild(opt);
-    }
-    aspectSelect.addEventListener('change', () => {
-      pushUndo();
-      clip.aspect = aspectSelect.value;
-      ensureCropForClip(clip);
-      renderClipList();
-      if (state.editMode === 'reframe' && state.selectedClipId === clip.id) positionCropOverlay();
-    });
-
-    row2.appendChild(startInput);
-    row2.appendChild(toLabel);
-    row2.appendChild(endInput);
-    row2.appendChild(durInput);
-    row2.appendChild(aspectSelect);
-
-    if (clip.aspect === 'custom') {
-      const ratioWrap = document.createElement('div');
-      ratioWrap.className = 'custom-ratio';
-      const wInput = document.createElement('input');
-      wInput.type = 'number';
-      wInput.min = '1';
-      wInput.value = clip.customRatio.w;
-      const xLabel = document.createElement('span');
-      xLabel.textContent = ':';
-      const hInput = document.createElement('input');
-      hInput.type = 'number';
-      hInput.min = '1';
-      hInput.value = clip.customRatio.h;
-      function commitRatio() {
-        pushUndo();
-        clip.customRatio = {
-          w: Math.max(1, parseFloat(wInput.value) || 16),
-          h: Math.max(1, parseFloat(hInput.value) || 9),
-        };
-        ensureCropForClip(clip);
-        if (state.editMode === 'reframe' && state.selectedClipId === clip.id) positionCropOverlay();
-      }
-      wInput.addEventListener('change', commitRatio);
-      hInput.addEventListener('change', commitRatio);
-      ratioWrap.appendChild(wInput);
-      ratioWrap.appendChild(xLabel);
-      ratioWrap.appendChild(hInput);
-      row2.appendChild(ratioWrap);
-    }
-
-    // Row 3: reframe / stickers / duplicate buttons
-    const row3 = document.createElement('div');
-    row3.className = 'clip-row3';
-    const reframeBtn = document.createElement('button');
-    reframeBtn.className = 'btn small';
-    reframeBtn.textContent = 'Reframe';
-    reframeBtn.disabled = clip.aspect === 'original';
-    reframeBtn.addEventListener('click', () => enterReframeMode(clip.id));
-    const stickerBtn = document.createElement('button');
-    stickerBtn.className = 'btn small';
-    stickerBtn.textContent = '😀 Stickers';
-    stickerBtn.addEventListener('click', () => enterStickerMode(clip.id));
-    const dupBtn = document.createElement('button');
-    dupBtn.className = 'btn small';
-    dupBtn.textContent = 'Duplicate';
-    dupBtn.addEventListener('click', () => {
-      pushUndo();
-      clipCounter += 1;
-      const copy = cloneClips([clip])[0];
-      copy.id = `clip-${clipCounter}-${Date.now()}`;
-      copy.name = `${clip.name} copy`;
-      const idx = state.clips.findIndex((c) => c.id === clip.id);
-      state.clips.splice(idx + 1, 0, copy);
-      renderClipList();
-    });
-    row3.appendChild(reframeBtn);
-    row3.appendChild(stickerBtn);
-    row3.appendChild(dupBtn);
-
-    // Audio row
-    const audioRow = document.createElement('div');
-    audioRow.className = 'audio-row';
-    if (!clip.audio) {
-      const addAudioBtn = document.createElement('button');
-      addAudioBtn.className = 'btn small';
-      addAudioBtn.textContent = '+ Add Audio';
-      addAudioBtn.addEventListener('click', async () => {
-        const result = await window.nineJaCut.selectAudio();
-        if (!result) return;
-        pushUndo();
-        clip.audio = { path: result.filePath, name: result.fileName, volume: 1, muteOriginal: false };
-        renderClipList();
-      });
-      audioRow.appendChild(addAudioBtn);
-    } else {
-      const line1 = document.createElement('div');
-      line1.className = 'audio-line';
-      const audioName = document.createElement('span');
-      audioName.className = 'audio-name';
-      audioName.textContent = `🎵 ${clip.audio.name}`;
-      audioName.title = clip.audio.name;
-      const removeBtn = document.createElement('button');
-      removeBtn.className = 'btn small danger';
-      removeBtn.textContent = '×';
-      removeBtn.addEventListener('click', () => {
-        pushUndo();
-        clip.audio = null;
-        renderClipList();
-      });
-      line1.appendChild(audioName);
-      line1.appendChild(removeBtn);
-
-      const line2 = document.createElement('div');
-      line2.className = 'audio-line';
-      const volLabel = document.createElement('span');
-      volLabel.textContent = 'Vol';
-      const volSlider = document.createElement('input');
-      volSlider.type = 'range';
-      volSlider.min = '0';
-      volSlider.max = '200';
-      volSlider.value = String(Math.round(clip.audio.volume * 100));
-      volSlider.addEventListener('pointerdown', () => armSnapshot());
-      volSlider.addEventListener('input', () => {
-        clip.audio.volume = Number(volSlider.value) / 100;
-        commitSnapshotIfArmed();
-      });
-      line2.appendChild(volLabel);
-      line2.appendChild(volSlider);
-
-      const muteLabel = document.createElement('label');
-      muteLabel.className = 'mute-toggle';
-      const muteCheckbox = document.createElement('input');
-      muteCheckbox.type = 'checkbox';
-      muteCheckbox.checked = !!clip.audio.muteOriginal;
-      muteCheckbox.addEventListener('change', () => {
-        pushUndo();
-        clip.audio.muteOriginal = muteCheckbox.checked;
-      });
-      muteLabel.appendChild(muteCheckbox);
-      muteLabel.appendChild(document.createTextNode('Replace original audio'));
-
-      const loopLabel = document.createElement('label');
-      loopLabel.className = 'mute-toggle';
-      const loopCheckbox = document.createElement('input');
-      loopCheckbox.type = 'checkbox';
-      loopCheckbox.checked = clip.audio.loop !== false;
-      loopCheckbox.addEventListener('change', () => {
-        pushUndo();
-        clip.audio.loop = loopCheckbox.checked;
-      });
-      loopLabel.appendChild(loopCheckbox);
-      loopLabel.appendChild(document.createTextNode('Loop music to fill the clip'));
-
-      const toggles = document.createElement('div');
-      toggles.className = 'audio-line toggles';
-      toggles.appendChild(muteLabel);
-      toggles.appendChild(loopLabel);
-
-      audioRow.appendChild(line1);
-      audioRow.appendChild(line2);
-      audioRow.appendChild(toggles);
-    }
-
-    // Sticker list row
-    const stickerRow = document.createElement('div');
-    stickerRow.className = 'sticker-row';
-    for (const sticker of clip.stickers) {
-      const ui = STICKERS_UI.find((s) => s.key === sticker.key);
-      const line1 = document.createElement('div');
-      line1.className = 'sticker-line';
-      const emojiSpan = document.createElement('span');
-      emojiSpan.className = 'sticker-emoji';
-      emojiSpan.textContent = ui ? ui.emoji : '❓';
-      const startT = document.createElement('input');
-      startT.className = 'clip-time';
-      startT.value = formatTime(sticker.start);
-      startT.addEventListener('change', () => {
-        pushUndo();
-        sticker.start = Math.max(0, parseTimeInput(startT.value, sticker.start));
-        startT.value = formatTime(sticker.start);
-      });
-      const arrowSpan = document.createElement('span');
-      arrowSpan.textContent = '→';
-      const endT = document.createElement('input');
-      endT.className = 'clip-time';
-      endT.value = formatTime(sticker.end);
-      endT.addEventListener('change', () => {
-        pushUndo();
-        sticker.end = Math.max(sticker.start + 0.1, parseTimeInput(endT.value, sticker.end));
-        endT.value = formatTime(sticker.end);
-      });
-      const removeBtn = document.createElement('button');
-      removeBtn.className = 'btn small danger';
-      removeBtn.textContent = '×';
-      removeBtn.addEventListener('click', () => {
-        pushUndo();
-        clip.stickers = clip.stickers.filter((s) => s.id !== sticker.id);
-        renderClipList();
-        if (state.editMode === 'stickers' && state.selectedClipId === clip.id) renderStickerLayer();
-      });
-      line1.appendChild(emojiSpan);
-      line1.appendChild(startT);
-      line1.appendChild(arrowSpan);
-      line1.appendChild(endT);
-      line1.appendChild(removeBtn);
-
-      const line2 = document.createElement('div');
-      line2.className = 'sticker-line';
-      const sizeLabel = document.createElement('span');
-      sizeLabel.textContent = 'Size';
-      const sizeSlider = document.createElement('input');
-      sizeSlider.type = 'range';
-      sizeSlider.min = '30';
-      sizeSlider.max = String(Math.max(60, Math.round((state.videoWidth || 1920) * 0.6)));
-      sizeSlider.value = String(Math.round(sticker.size));
-      sizeSlider.addEventListener('pointerdown', () => armSnapshot());
-      sizeSlider.addEventListener('input', () => {
-        sticker.size = Number(sizeSlider.value);
-        commitSnapshotIfArmed();
-        if (state.editMode === 'stickers' && state.selectedClipId === clip.id) positionStickerLayer();
-      });
-      line2.appendChild(sizeLabel);
-      line2.appendChild(sizeSlider);
-
-      stickerRow.appendChild(line1);
-      stickerRow.appendChild(line2);
-    }
-
-    const progressWrap = document.createElement('div');
-    progressWrap.className = 'progress-bar';
-    progressWrap.id = `progress-${clip.id}`;
-    const progressFill = document.createElement('div');
-    progressFill.className = 'progress-fill';
-    progressWrap.appendChild(progressFill);
-
-    const statusEl = document.createElement('div');
-    statusEl.className = 'clip-status';
-    statusEl.id = `status-${clip.id}`;
-
-    card.appendChild(row1);
-    card.appendChild(row2);
-    card.appendChild(row3);
-    card.appendChild(audioRow);
-    card.appendChild(stickerRow);
-    card.appendChild(buildFxSection(clip));
-    card.appendChild(progressWrap);
-    card.appendChild(statusEl);
-    clipList.appendChild(card);
-  }
-  updatePreviewFx();
-}
 
 // ---------- Effects panel (speed, look, fades, sound, text) ----------
 const openFxPanels = new Set();
@@ -928,11 +543,9 @@ function fxSummaryText(clip) {
 // Move the playhead into a clip so its effects show in the preview.
 async function previewClip(clip, outputTime = 0) {
   state.previewClipId = clip.id;
-  if (clip.sourcePath && clip.sourcePath !== state.activeSourcePath) {
-    await switchActiveSource(clip.sourcePath);
-  }
-  const t = clip.start + Math.min(Math.max(0, outputTime), clipOutputDuration(clip) - 0.05) * (clip.speed || 1);
-  if (video.currentTime < clip.start || video.currentTime > clip.end) video.currentTime = t;
+  const local = Math.min(Math.max(0, outputTime), clipOutputDuration(clip) - 0.05);
+  const inside = clip.sourcePath === state.activeSourcePath && video.currentTime >= clip.start && video.currentTime <= clip.end;
+  if (!inside) await seekToClip(clip, local);
   updatePreviewFx();
 }
 
@@ -1138,7 +751,7 @@ async function refreshCaptionsInfo() {
   try { captionUi.info = await window.nineJaCut.getCaptionsInfo(); } catch (e) { /* keep defaults */ }
 }
 
-const DEFAULT_CAPTION_STYLE = { position: 'bottom', style: 'box', size: 6, color: '#ffffff', upper: false };
+const DEFAULT_CAPTION_STYLE = { position: 'bottom', style: 'box', size: 5, color: '#ffffff', upper: false };
 
 // Same conversion as clip-export.js: absolute source times -> finished clip.
 function captionPreviewItems(clip) {
@@ -1506,9 +1119,43 @@ function updatePreviewFx() {
   } else {
     video.style.transform = '';
   }
+  // Show only the part of the picture that will be exported.
+  const mask = document.getElementById('frameMask');
+  if (mask) {
+    const framed = clip && clip.aspect !== 'original' && clip.crop && !state.editMode;
+    mask.classList.toggle('hidden', !framed);
+    if (framed) {
+      const f = frameRectFor(clip);
+      mask.style.left = `${f.x}px`;
+      mask.style.top = `${f.y}px`;
+      mask.style.width = `${f.w}px`;
+      mask.style.height = `${f.h}px`;
+    }
+  }
   const rate = clip ? (clip.speed || 1) : 1;
   if (video.playbackRate !== rate) video.playbackRate = rate;
   renderTextPreview(clip);
+}
+
+// Same layout maths as clip-export.js (wrapForFrame / lineY), so the
+// preview shows the text where - and how - the export will draw it.
+const PREVIEW_LINE_GAP = 1.3;
+
+function wrapForFrame(text, sizePct, aspect) {
+  const out = [];
+  for (const raw of String(text).split('\n')) {
+    const upper = /[A-Z]/.test(raw) && raw === raw.toUpperCase();
+    const charW = (upper ? 0.68 : 0.58) * (sizePct / 100);
+    const maxChars = Math.max(6, Math.floor((0.9 * aspect) / charW));
+    let line = '';
+    for (const word of raw.split(/\s+/).filter(Boolean)) {
+      if (!line) line = word;
+      else if ((line + ' ' + word).length <= maxChars) line += ` ${word}`;
+      else { out.push(line); line = word; }
+    }
+    out.push(line);
+  }
+  return out.filter((l, i, arr) => l || (i > 0 && i < arr.length - 1));
 }
 
 function renderTextPreview(clip) {
@@ -1521,95 +1168,34 @@ function renderTextPreview(clip) {
   const outTime = (video.currentTime - clip.start) / (clip.speed || 1);
   for (const t of items) {
     if (!String(t.text || '').trim() || outTime < t.start || outTime > t.end) continue;
-    const el = document.createElement('div');
-    el.className = `text-preview style-${t.style || 'outline'} pos-${t.position || 'bottom'}`;
-    const span = document.createElement('span');
-    span.textContent = t.text;
-    el.appendChild(span);
-    el.style.left = `${frame.x}px`;
-    el.style.width = `${frame.w}px`;
-    el.style.fontSize = `${Math.max(6, (frame.h * (t.size || 7)) / 100)}px`;
-    el.style.color = t.color || '#ffffff';
-    if (t.position === 'top') el.style.top = `${frame.y + frame.h * 0.08}px`;
-    else if (t.position === 'center') { el.style.top = `${frame.y + frame.h / 2}px`; el.style.transform = 'translateY(-50%)'; }
-    else { el.style.top = `${frame.y + frame.h * 0.86}px`; el.style.transform = 'translateY(-100%)'; }
-    textLayer.appendChild(el);
+    const sizePct = Math.min(30, Math.max(2, t.size || 7));
+    const fontPx = (frame.h * sizePct) / 100;
+    const lh = fontPx * PREVIEW_LINE_GAP;
+    const lines = wrapForFrame(String(t.text).trim(), sizePct, frame.w / frame.h);
+    lines.forEach((line, i) => {
+      if (!line) return;
+      let top;
+      if (t.position === 'top') top = frame.y + frame.h * 0.08 + i * lh;
+      else if (t.position === 'center') top = frame.y + (frame.h - lines.length * lh) / 2 + i * lh;
+      else top = frame.y + frame.h * 0.86 - (lines.length - i) * lh;
+      const row = document.createElement('div');
+      row.className = `text-preview style-${t.style || 'outline'}`;
+      const span = document.createElement('span');
+      span.textContent = line;
+      row.appendChild(span);
+      row.style.left = `${frame.x}px`;
+      row.style.width = `${frame.w}px`;
+      row.style.top = `${top}px`;
+      row.style.fontSize = `${Math.max(5, fontPx)}px`;
+      row.style.lineHeight = `${fontPx * 1.1}px`;
+      row.style.color = t.color || '#ffffff';
+      textLayer.appendChild(row);
+    });
   }
 }
 
 video.addEventListener('seeked', updatePreviewFx);
 video.addEventListener('loadedmetadata', updatePreviewFx);
-
-// ---------- Export settings ----------
-function applyExportSettingsToUI() {
-  const st = state.exportSettings;
-  setResolution.value = st.resolution;
-  setQuality.value = st.quality;
-  setCombine.checked = !!st.combine;
-  setTransition.value = st.transition;
-  setTransitionDur.value = String(st.transitionDuration);
-  setCombinedName.value = st.combinedName || '';
-  combineOptions.classList.toggle('hidden', !st.combine);
-  btnExportAll.textContent = st.combine ? 'Export Video' : 'Export All Clips';
-}
-
-setResolution.addEventListener('change', () => { state.exportSettings.resolution = setResolution.value; });
-setQuality.addEventListener('change', () => { state.exportSettings.quality = setQuality.value; });
-setCombine.addEventListener('change', () => {
-  state.exportSettings.combine = setCombine.checked;
-  applyExportSettingsToUI();
-});
-setTransition.addEventListener('change', () => { state.exportSettings.transition = setTransition.value; });
-setTransitionDur.addEventListener('change', () => { state.exportSettings.transitionDuration = Number(setTransitionDur.value); });
-setCombinedName.addEventListener('change', () => { state.exportSettings.combinedName = setCombinedName.value.trim(); });
-
-// ---------- Keyboard shortcuts ----------
-const SHORTCUTS_TEXT = 'Shortcuts: Space play/pause · I mark in · O mark out · Enter add clip · ←/→ 1s (Shift: 5s) · , / . one frame · Home/End start/end · Esc close editing · Ctrl+Z undo · Ctrl+S save project · Ctrl+O open video';
-
-btnShortcuts.addEventListener('click', () => setStatus(SHORTCUTS_TEXT));
-
-function seekBy(seconds) {
-  if (!video.duration) return;
-  video.currentTime = Math.min(video.duration, Math.max(0, video.currentTime + seconds));
-}
-
-window.addEventListener('keydown', (e) => {
-  const tag = (e.target && e.target.tagName ? e.target.tagName : '').toLowerCase();
-  const typing = tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable);
-  const mod = e.ctrlKey || e.metaKey;
-  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-
-  if (mod && key === 's') { e.preventDefault(); btnSaveProject.click(); return; }
-  if (mod && key === 'o') { e.preventDefault(); btnOpenVideo.click(); return; }
-  if (mod && key === 'z' && !typing) { e.preventDefault(); undo(); return; }
-  if (typing || mod || e.altKey) return;
-  if (clipEditorView.classList.contains('hidden')) return;
-
-  // Keep Space from also "clicking" whichever button has focus.
-  if (tag === 'button' && (key === ' ' || key === 'Enter')) e.target.blur();
-
-  switch (key) {
-    case ' ':
-      e.preventDefault();
-      if (state.activeSourcePath) { if (video.paused) video.play(); else video.pause(); }
-      break;
-    case 'i': btnMarkIn.click(); break;
-    case 'o': btnMarkOut.click(); break;
-    case 'Enter':
-      e.preventDefault();
-      if (!btnAddClip.disabled) btnAddClip.click();
-      break;
-    case 'ArrowLeft': e.preventDefault(); seekBy(e.shiftKey ? -5 : -1); break;
-    case 'ArrowRight': e.preventDefault(); seekBy(e.shiftKey ? 5 : 1); break;
-    case ',': video.pause(); seekBy(-1 / 30); break;
-    case '.': video.pause(); seekBy(1 / 30); break;
-    case 'Home': video.currentTime = 0; break;
-    case 'End': if (video.duration) video.currentTime = video.duration; break;
-    case 'Escape': exitEditModes(); break;
-    case '?': setStatus(SHORTCUTS_TEXT); break;
-    default: break;
-  }
-});
 
 // ---------- Shared display-rect helper ----------
 function getVideoDisplayRect() {
@@ -1885,113 +1471,6 @@ window.addEventListener('resize', () => {
   if (state.editMode === 'reframe') positionCropOverlay();
   if (state.editMode === 'stickers') positionStickerLayer();
   updatePreviewFx();
-});
-
-// ---------- Save / load project ----------
-btnSaveProject.addEventListener('click', async () => {
-  const projectData = {
-    version: 2,
-    sources: state.sources.map((s) => ({ path: s.path, name: s.name })),
-    activeSourcePath: state.activeSourcePath,
-    exportFolder: state.exportFolder,
-    exportSettings: { ...state.exportSettings },
-    clips: state.clips.map(serializeClip),
-  };
-  const savedPath = await window.nineJaCut.saveProject(projectData);
-  if (savedPath) setStatus(`Project saved to ${savedPath}`);
-});
-
-btnLoadProject.addEventListener('click', async () => {
-  const data = await window.nineJaCut.loadProject();
-  if (!data) return;
-
-  state.sources = [];
-  for (const s of (data.sources || [])) {
-    try {
-      const fileUrl = await window.nineJaCut.toFileUrl(s.path);
-      state.sources.push({ path: s.path, url: fileUrl, name: s.name });
-    } catch (e) { /* skip files that can no longer be found */ }
-  }
-
-  state.clips = (data.clips || []).map((c) => normalizeClip({
-    thumbUrl: null,
-    stickers: [],
-    ...c,
-  }));
-  state.exportSettings = { ...state.exportSettings, ...(data.exportSettings || {}) };
-  applyExportSettingsToUI();
-  state.previewClipId = null;
-  state.exportFolder = data.exportFolder || null;
-  exportFolderLabel.textContent = state.exportFolder || 'No folder chosen';
-  exportFolderLabel.title = state.exportFolder || '';
-
-  exitEditModes();
-  undoStack.length = 0;
-  updateUndoButton();
-
-  if (state.sources.length) {
-    const target = (data.activeSourcePath && state.sources.find((s) => s.path === data.activeSourcePath))
-      ? data.activeSourcePath
-      : state.sources[0].path;
-    await switchActiveSource(target);
-  }
-  resetMarks();
-  renderSourcePills();
-  renderClipList();
-  btnExportAll.disabled = !(state.clips.length > 0 && state.exportFolder);
-  for (const c of state.clips) refreshThumbnail(c);
-  setStatus('Project loaded');
-});
-
-// ---------- Export ----------
-btnExportFolder.addEventListener('click', async () => {
-  const folder = await window.nineJaCut.selectExportFolder();
-  if (!folder) return;
-  state.exportFolder = folder;
-  exportFolderLabel.textContent = folder;
-  exportFolderLabel.title = folder;
-  btnExportAll.disabled = !(state.clips.length > 0);
-});
-
-window.nineJaCut.onExportProgress(({ id, status, percent, message }) => {
-  if (id === 'combined') {
-    if (status === 'running') setStatus(`Joining clips into one video… ${percent}%`);
-    if (status === 'error') setStatus(`Export failed: ${message}`);
-    return;
-  }
-  const fill = document.querySelector(`#progress-${id} .progress-fill`);
-  const statusEl = document.getElementById(`status-${id}`);
-  if (fill && typeof percent === 'number') fill.style.width = `${percent}%`;
-  if (statusEl) {
-    if (status === 'start') { statusEl.textContent = 'Exporting…'; statusEl.className = 'clip-status'; }
-    if (status === 'running') { statusEl.textContent = `Exporting… ${percent}%`; statusEl.className = 'clip-status'; }
-    if (status === 'done') { statusEl.textContent = 'Done'; statusEl.className = 'clip-status done'; }
-    if (status === 'error') { statusEl.textContent = `Error: ${message}`; statusEl.className = 'clip-status error'; }
-  }
-});
-
-btnExportAll.addEventListener('click', async () => {
-  if (!state.exportFolder || state.clips.length === 0) return;
-  btnExportAll.disabled = true;
-  const settings = { ...state.exportSettings };
-  setStatus(settings.combine ? 'Rendering clips for your video…' : 'Exporting clips…');
-  const payload = {
-    exportFolder: state.exportFolder,
-    clips: state.clips.map(serializeClip),
-    settings,
-  };
-  const results = await window.nineJaCut.exportClips(payload);
-  if (settings.combine) {
-    const r = results[0];
-    setStatus(r && r.ok ? `Video saved to ${r.outPath}` : `Export failed: ${r ? r.error : 'unknown error'}`);
-  } else {
-    const okCount = results.filter((r) => r.ok).length;
-    setStatus(`Exported ${okCount}/${results.length} clip(s) to ${state.exportFolder}`);
-  }
-  const warnings = results.flatMap((r) => r.warnings || []);
-  if (warnings.length) setStatus(`${statusBar.textContent} — Note: ${warnings.join(' ')}`);
-  btnExportAll.disabled = false;
-  window.nineJaCut.openFolder(state.exportFolder);
 });
 
 // ---------- Promo Video mode ----------
@@ -2270,13 +1749,3 @@ async function initPromo() {
   renderPromoGallery('');
 }
 
-initTheme();
-applyExportSettingsToUI();
-loadCaptionPrefs();
-refreshCaptionsInfo().then(() => renderClipList());
-initAbout();
-switchMode('clip');
-initStickerPicker();
-renderClipList();
-renderSourcePills();
-initPromo();

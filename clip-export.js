@@ -180,7 +180,7 @@ function captionTexts(clip) {
     if (style.upper) text = text.toUpperCase();
     out.push({
       text,
-      size: style.size != null ? style.size : 6,
+      size: style.size != null ? style.size : 5,
       color: style.color || '#ffffff',
       position: style.position || 'bottom',
       style: style.style || 'box',
@@ -189,6 +189,35 @@ function captionTexts(clip) {
     });
   }
   return out;
+}
+
+// Text layout shared with the preview (renderer.js has the same maths):
+// lines are wrapped to fit 90% of the frame width, and each line is drawn
+// centred on its own, LINE_GAP font-heights apart.
+const LINE_GAP = 1.3;
+
+function wrapForFrame(text, sizePct, aspect) {
+  const out = [];
+  for (const raw of String(text).split('\n')) {
+    const upper = /[A-Z]/.test(raw) && raw === raw.toUpperCase();
+    const charW = (upper ? 0.68 : 0.58) * (sizePct / 100);
+    const maxChars = Math.max(6, Math.floor((0.9 * aspect) / charW));
+    let line = '';
+    for (const word of raw.split(/\s+/).filter(Boolean)) {
+      if (!line) line = word;
+      else if ((line + ' ' + word).length <= maxChars) line += ` ${word}`;
+      else { out.push(line); line = word; }
+    }
+    out.push(line);
+  }
+  return out.filter((l, i, arr) => l || (i > 0 && i < arr.length - 1));
+}
+
+function lineY(position, index, count, sizeFrac) {
+  const lh = `h*${fmt(sizeFrac * LINE_GAP)}`;
+  if (position === 'top') return `h*0.08+${index}*${lh}`;
+  if (position === 'center') return `(h-${count}*${lh})/2+${index}*${lh}`;
+  return `h*0.86-${count - index}*${lh}`;
 }
 
 function textFilters(clip, ctx) {
@@ -200,31 +229,36 @@ function textFilters(clip, ctx) {
     return [];
   }
   const dur = outputDuration(clip);
+  const aspect = ctx.frameAspect > 0 ? ctx.frameAspect : 16 / 9;
   const filters = [];
   for (const t of texts) {
     const content = String(t.text || '').trim();
     if (!content) continue;
-    const size = clamp(num(t.size, 7), 2, 30) / 100;
+    const sizePct = clamp(num(t.size, 7), 2, 30);
+    const size = sizePct / 100;
     const start = clamp(num(t.start, 0), 0, dur);
     const end = clamp(num(t.end, dur), start + 0.05, Math.max(start + 0.05, dur + 1));
-    const txtFile = writeTextFile(ctx.tmpDir, content);
-    const parts = [
-      `fontfile=${escPath(ctx.fontPath)}`,
-      `textfile=${escPath(txtFile)}`,
-      'expansion=none',
-      `fontsize=h*${fmt(size)}`,
-      `fontcolor=${hexColor(t.color, '0xffffff')}`,
-      'x=(w-text_w)/2',
-      `y=${TEXT_POSITIONS[t.position] || TEXT_POSITIONS.bottom}`,
-      'line_spacing=8',
-    ];
-    if (t.style === 'box') {
-      parts.push('box=1', 'boxcolor=black@0.55', 'boxborderw=18');
-    } else if (t.style !== 'plain') {
-      parts.push('borderw=4', 'bordercolor=black@0.85');
-    }
-    parts.push(`enable='between(t,${fmt(start)},${fmt(end)})'`);
-    filters.push(`drawtext=${parts.join(':')}`);
+    const lines = wrapForFrame(content, sizePct, aspect);
+    lines.forEach((line, i) => {
+      if (!line) return;
+      const txtFile = writeTextFile(ctx.tmpDir, line);
+      const parts = [
+        `fontfile=${escPath(ctx.fontPath)}`,
+        `textfile=${escPath(txtFile)}`,
+        'expansion=none',
+        `fontsize=h*${fmt(size)}`,
+        `fontcolor=${hexColor(t.color, '0xffffff')}`,
+        'x=(w-text_w)/2',
+        `y=${lineY(t.position, i, lines.length, size)}`,
+      ];
+      if (t.style === 'box') {
+        parts.push('box=1', 'boxcolor=black@0.55', `boxborderw=${Math.max(6, Math.round(18 * (sizePct / 7)))}`);
+      } else if (t.style !== 'plain') {
+        parts.push('borderw=4', 'bordercolor=black@0.85');
+      }
+      parts.push(`enable='between(t,${fmt(start)},${fmt(end)})'`);
+      filters.push(`drawtext=${parts.join(':')}`);
+    });
   }
   return filters;
 }
@@ -334,7 +368,10 @@ function buildClipArgs(opts) {
     post.push(`scale=w=${base}:h=${base}:force_original_aspect_ratio=increase:force_divisible_by=2`, 'setsar=1');
   }
   post.push(...lookFilters(clip));
-  post.push(...textFilters(clip, opts));
+  const frameAspect = reframed
+    ? outDims.outW / outDims.outH
+    : (sourceWidth && sourceHeight ? sourceWidth / sourceHeight : 16 / 9);
+  post.push(...textFilters(clip, { ...opts, frameAspect }));
   const { fi, fo } = fadeValues(clip);
   if (fi > 0) post.push(`fade=t=in:st=0:d=${fmt(fi)}`);
   if (fo > 0) post.push(`fade=t=out:st=${fmt(Math.max(0, dur - fo))}:d=${fmt(fo)}`);
@@ -355,12 +392,16 @@ function buildClipArgs(opts) {
   const mixInputs = aLabel ? [aLabel] : [];
   if (hasImported) {
     const vol = clamp(num(clip.audio.volume, 1), 0, 3);
-    chains.push(`[${importedIdx}:a]atrim=start=0:end=${fmt(dur)},asetpts=PTS-STARTPTS,volume=${fmt(vol)}[aimp]`);
+    // offset: where in the song this clip starts (set when a clip is split,
+    // so the second half carries on from where the first half stopped).
+    const off = Math.max(0, num(clip.audio.offset, 0));
+    chains.push(`[${importedIdx}:a]atrim=start=${fmt(off)}:end=${fmt(off + dur)},asetpts=PTS-STARTPTS,volume=${fmt(vol)}[aimp]`);
     mixInputs.push('aimp');
   }
   if (hasVoice) {
     const vol = clamp(num(clip.voiceover.volume, 1), 0, 3);
-    chains.push(`[${voiceIdx}:a]aresample=48000,atrim=start=0:end=${fmt(dur)},asetpts=PTS-STARTPTS,volume=${fmt(vol)}[avoice]`);
+    const off = Math.max(0, num(clip.voiceover.offset, 0));
+    chains.push(`[${voiceIdx}:a]aresample=48000,atrim=start=${fmt(off)}:end=${fmt(off + dur)},asetpts=PTS-STARTPTS,volume=${fmt(vol)}[avoice]`);
     mixInputs.push('avoice');
   }
   if (mixInputs.length === 1) {
@@ -489,22 +530,34 @@ function buildJoinArgs({ parts, width, height, transition, transitionDuration, s
     chains.push(`[${i}:a]aresample=48000,aformat=channel_layouts=stereo[a${i}]`);
   });
 
-  const useTransition = n > 1 && TRANSITIONS.has(transition);
+  // Each part may say how it hands over to the next one. Parts without
+  // their own setting fall back to the single project-wide transition.
+  const boundary = (i) => {
+    const own = parts[i - 1].transition;
+    const type = own ? own.type : transition;
+    const dur = own ? own.duration : transitionDuration;
+    return { type: TRANSITIONS.has(type) ? type : 'none', duration: num(dur, 0.5) };
+  };
+  const anyTransition = n > 1 && parts.slice(1).some((_, j) => boundary(j + 1).type !== 'none');
   let total = parts.reduce((sum, p) => sum + p.duration, 0);
-  if (!useTransition) {
+  if (!anyTransition) {
     const pads = parts.map((_, i) => `[v${i}][a${i}]`).join('');
     chains.push(`${pads}concat=n=${n}:v=1:a=1[vout][aout]`);
   } else {
-    const shortest = Math.min(...parts.map((p) => p.duration));
-    const T = clamp(num(transitionDuration, 0.5), 0.1, Math.max(0.1, shortest / 2 - 0.05));
     let vPrev = 'v0';
     let aPrev = 'a0';
     let merged = parts[0].duration;
     for (let i = 1; i < n; i++) {
+      const b = boundary(i);
       const last = i === n - 1;
       const vOut = last ? 'vout' : `vx${i}`;
       const aOut = last ? 'aout' : `ax${i}`;
-      chains.push(`[${vPrev}][v${i}]xfade=transition=${transition}:duration=${fmt(T)}:offset=${fmt(Math.max(0, merged - T))}[${vOut}]`);
+      // A "none" boundary inside a chain of transitions is a one-frame
+      // dissolve, which looks like a straight cut.
+      const type = b.type === 'none' ? 'fade' : b.type;
+      const limit = Math.max(0.034, Math.min(parts[i - 1].duration, parts[i].duration) / 2 - 0.05);
+      const T = b.type === 'none' ? 0.034 : clamp(b.duration, 0.1, Math.max(0.1, limit));
+      chains.push(`[${vPrev}][v${i}]xfade=transition=${type}:duration=${fmt(T)}:offset=${fmt(Math.max(0, merged - T))}[${vOut}]`);
       chains.push(`[${aPrev}][a${i}]acrossfade=d=${fmt(T)}[${aOut}]`);
       vPrev = vOut;
       aPrev = aOut;
@@ -549,7 +602,15 @@ async function exportCombined(ctx, { clips, settings = {}, outPath, sourceInfo }
         intermediate: true,
       }, (percent) => onProgress({ id: clip.id, percent }));
       const probed = await probeMedia(ctx.ffmpegPath, partPath);
-      parts.push({ path: partPath, duration: probed.duration || outputDuration(clip), width: probed.width, height: probed.height });
+      parts.push({
+        path: partPath,
+        duration: probed.duration || outputDuration(clip),
+        width: probed.width,
+        height: probed.height,
+        transition: clip.transitionOut && clip.transitionOut.type
+          ? { type: clip.transitionOut.type, duration: num(clip.transitionOut.duration, 0.5) }
+          : null,
+      });
       onProgress({ id: clip.id, percent: 100, done: true });
     }
     const first = parts[0];
@@ -579,6 +640,7 @@ module.exports = {
   MOTION,
   safeFileName,
   captionTexts,
+  wrapForFrame,
   getOutputDims,
   outputDuration,
   atempoChain,
