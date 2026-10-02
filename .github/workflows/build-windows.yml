@@ -1,8 +1,8 @@
 # Builds the single-file Windows app (9jacut.exe) on GitHub's Windows
 # machines. Runs the export tests first, so a broken build never ships.
 #
-# - Push a tag like v2.0.0  -> builds and attaches 9jacut.exe to that
-#   GitHub Release (people download it from the Releases page).
+# - Publish a GitHub Release (or push a tag like v2.0.0) -> builds and
+#   attaches 9jacut.exe to that release (people download it from there).
 # - "Run workflow" button on the Actions tab -> builds and keeps the .exe
 #   as a downloadable test artifact (no public release).
 name: Build Windows app
@@ -10,6 +10,8 @@ name: Build Windows app
 on:
   push:
     tags: ['v*']
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
