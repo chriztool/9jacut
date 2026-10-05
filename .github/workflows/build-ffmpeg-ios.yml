@@ -1,0 +1,106 @@
+# Builds 9jaCut's own iPhone copy of FFmpeg (App Store safe: LGPL, Apple
+# hardware video encoder, fonts for text) and publishes it as a GitHub
+# release that the iOS app build downloads.
+#
+# Runs when mobile/ffmpeg-ios/ changes on the `ios` branch. Slow (30-60 min),
+# but only needed when the FFmpeg options change.
+name: Build FFmpeg for iOS
+
+on:
+  push:
+    branches: [ios]
+    paths:
+      - mobile/ffmpeg-ios/**
+      - .github/workflows/build-ffmpeg-ios.yml
+
+permissions:
+  contents: write
+
+jobs:
+  ffmpeg:
+    runs-on: macos-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the build settings
+        run: |
+          set -a; source mobile/ffmpeg-ios/build-config.env; set +a
+          for v in FFMPEG_IOS_RELEASE FFMPEG_KIT_REPO FFMPEG_KIT_COMMIT FFMPEG_KIT_OPTIONS; do
+            echo "$v=${!v}" >> "$GITHUB_ENV"
+          done
+
+      - name: Skip if this version is already published
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$FFMPEG_IOS_RELEASE" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::notice::$FFMPEG_IOS_RELEASE is already published; bump FFMPEG_IOS_RELEASE to rebuild."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Use the newest Xcode on the machine
+        if: steps.existing.outputs.skip != 'true'
+        run: |
+          XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Install build tools
+        if: steps.existing.outputs.skip != 'true'
+        run: brew install autoconf automake libtool pkg-config nasm cmake meson ninja gperf texinfo || true
+
+      - name: Get FFmpegKit
+        if: steps.existing.outputs.skip != 'true'
+        run: |
+          git clone "$FFMPEG_KIT_REPO" ffmpeg-kit
+          git -C ffmpeg-kit checkout "$FFMPEG_KIT_COMMIT"
+
+      - name: Build FFmpeg + FFmpegKit for iPhone and the simulator
+        if: steps.existing.outputs.skip != 'true'
+        working-directory: ffmpeg-kit
+        run: |
+          ./ios.sh $FFMPEG_KIT_OPTIONS || { tail -200 build.log; exit 1; }
+          ls prebuilt/bundle-apple-xcframework-ios
+
+      - name: Check the build is App Store safe and has what 9jaCut needs
+        if: steps.existing.outputs.skip != 'true'
+        working-directory: ffmpeg-kit/prebuilt/bundle-apple-xcframework-ios
+        run: |
+          set -e
+          if find . -name 'LICENSE.X264' -o -name 'LICENSE.GPL*' | grep -q .; then
+            echo "::error::GPL component found in the build"; exit 1
+          fi
+          AVF=$(find libavfilter.xcframework -path '*ios-arm64/*' -name libavfilter -type f | head -1)
+          AVC=$(find libavcodec.xcframework -path '*ios-arm64/*' -name libavcodec -type f | head -1)
+          # Filter/encoder names are compiled in as strings only when enabled.
+          strings "$AVF" | grep -qx 'drawtext' || { echo "::error::drawtext filter missing (fonts)"; exit 1; }
+          strings "$AVC" | grep -qx 'h264_videotoolbox' || { echo "::error::h264_videotoolbox encoder missing"; exit 1; }
+          echo "LGPL, drawtext and h264_videotoolbox all present."
+
+      - name: Package and publish
+        if: steps.existing.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          mkdir -p out/Frameworks out/Sources
+          cp -R ffmpeg-kit/prebuilt/bundle-apple-xcframework-ios/*.xcframework out/Frameworks/
+          cp -R ffmpeg-kit/Sources/FFmpegKit ffmpeg-kit/Sources/CFFmpegBridge out/Sources/
+          cp ffmpeg-kit/LICENSE* out/ 2>/dev/null || true
+          printf 'Built from %s at %s\nOptions: %s\n' "$FFMPEG_KIT_REPO" "$FFMPEG_KIT_COMMIT" "$FFMPEG_KIT_OPTIONS" > out/BUILD-INFO.txt
+          (cd out && zip -qry ../ffmpeg-ios.zip .)
+          shasum -a 256 ffmpeg-ios.zip | tee ffmpeg-ios.zip.sha256
+          gh release create "$FFMPEG_IOS_RELEASE" ffmpeg-ios.zip ffmpeg-ios.zip.sha256 \
+            -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "FFmpeg for 9jaCut iPhone ($FFMPEG_IOS_RELEASE)" \
+            --notes "LGPL FFmpeg + FFmpegKit for the 9jaCut iPhone app (not an app release). $(cat out/BUILD-INFO.txt)"
+
+      - name: Keep the build log if it failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-ios-build-log
+          path: ffmpeg-kit/build.log
+          if-no-files-found: ignore
