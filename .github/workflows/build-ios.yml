@@ -1,0 +1,87 @@
+# Builds the iPhone app on GitHub's Mac machines, so no Mac is needed.
+#
+# Right now (no Apple Developer account yet) it builds for the iPhone
+# SIMULATOR, starts the app on a simulated iPhone, and saves a screenshot.
+# That proves the app compiles and runs in Safari's engine (WebKit).
+#
+# Once the Apple Developer account is ready, a signed build + TestFlight
+# upload gets added here so the app can go on a real iPhone.
+#
+# Runs on every push to the `ios` branch, and from the Actions tab.
+name: Build iOS app
+
+on:
+  push:
+    branches: [ios]
+  workflow_dispatch:
+
+jobs:
+  simulator:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Use the newest Xcode on the machine
+        run: |
+          XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      # --ignore-scripts: the phone build only needs the Capacitor packages,
+      # not the desktop-only downloads (Electron, ffmpeg-static, sherpa-onnx).
+      - name: Install
+        run: npm install --ignore-scripts
+
+      - name: Build the phone web bundle and copy it into the iOS project
+        run: npm run ios:sync
+
+      - name: Build for the iPhone simulator
+        run: |
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build | tail -40
+          test -d build/Build/Products/Debug-iphonesimulator/App.app
+
+      - name: Start the app on a simulated iPhone and take a screenshot
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j \
+            | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; \
+              print(next(x['udid'] for k in sorted(d, reverse=True) if 'iOS' in k for x in d[k] if x['name'].startswith('iPhone')))")
+          echo "Simulator: $DEVICE"
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl install "$DEVICE" build/Build/Products/Debug-iphonesimulator/App.app
+          xcrun simctl launch "$DEVICE" com.ninejacut.app
+          sleep 20
+          xcrun simctl io "$DEVICE" screenshot ios-simulator.png
+          xcrun simctl spawn "$DEVICE" log show --last 2m --predicate 'process == "App"' --style compact > ios-app-log.txt || true
+          grep -iE "error|exception|⚡️" ios-app-log.txt | head -40 || true
+
+      - name: Keep the screenshot, log and simulator app
+        if: always()
+        run: |
+          if [ -d build/Build/Products/Debug-iphonesimulator/App.app ]; then
+            cd build/Build/Products/Debug-iphonesimulator && zip -qr "$GITHUB_WORKSPACE/9jaCut-simulator.zip" App.app
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 9jacut-ios-simulator
+          path: |
+            ios-simulator.png
+            ios-app-log.txt
+            9jaCut-simulator.zip
+          if-no-files-found: ignore
+          retention-days: 14

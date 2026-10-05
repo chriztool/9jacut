@@ -6,11 +6,19 @@
   "scripts": {
     "start": "electron .",
     "test": "node test/export-test.js",
-    "dist": "electron-builder --win"
+    "dist": "electron-builder --win",
+    "build:mobile": "node scripts/build-mobile.js",
+    "ios:sync": "node scripts/build-mobile.js && npx cap sync ios",
+    "test:mobile": "node scripts/build-mobile.js && electron test/mobile-bridge-test.js"
   },
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/filesystem": "^8.1.4",
+    "@capacitor/ios": "^8.5.2",
+    "@capacitor/share": "^8.0.3",
     "electron": "^31.0.0",
     "electron-builder": "^24.13.3"
   },

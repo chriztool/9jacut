@@ -978,8 +978,11 @@ async function startVoiceover(clip) {
   await previewClip(clip);
   video.pause();
   video.currentTime = clip.start;
-  const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
-  const recorder = new MediaRecorder(stream, { mimeType: mime });
+  // Desktop (Chromium) records WebM/Opus; iPhone (WebKit) only records MP4/AAC.
+  const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+    .find((m) => MediaRecorder.isTypeSupported(m)) || '';
+  const extension = mime.startsWith('audio/mp4') ? 'm4a' : 'webm';
+  const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
   const chunks = [];
   recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
   state.recording = { clipId: clip.id, recorder, stream, wasMuted: video.muted, timer: null, startedAt: 0 };
@@ -993,9 +996,9 @@ async function startVoiceover(clip) {
     video.muted = rec ? rec.wasMuted : false;
     const live = state.clips.find((c) => c.id === clip.id);
     if (!chunks.length || !live) { renderClipList(); return; }
-    const blob = new Blob(chunks, { type: mime });
+    const blob = new Blob(chunks, { type: mime || recorder.mimeType });
     const bytes = new Uint8Array(await blob.arrayBuffer());
-    const saved = await window.nineJaCut.saveRecording({ bytes, extension: 'webm' });
+    const saved = await window.nineJaCut.saveRecording({ bytes, extension });
     pushUndo();
     live.voiceover = { path: saved.filePath, url: saved.fileUrl, volume: 1 };
     renderClipList();

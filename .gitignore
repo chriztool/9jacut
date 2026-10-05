@@ -14,3 +14,6 @@ Thumbs.db
 
 # Logs
 npm-debug.log*
+
+# Phone web bundle (built by `npm run build:mobile`, copied into ios/ by cap sync)
+www/

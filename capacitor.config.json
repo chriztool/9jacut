@@ -1,0 +1,9 @@
+{
+  "appId": "com.ninejacut.app",
+  "appName": "9jaCut",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#111111"
+  }
+}
