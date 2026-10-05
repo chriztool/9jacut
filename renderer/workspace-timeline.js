@@ -199,6 +199,12 @@ function onClipPointerUp(e) {
   if (!d) return;
   hideDropIndicator();
   const clip = d.clip;
+  // On touch screens a swipe across a clip scrolls the timeline: the browser
+  // takes over and cancels the pointer. That is not a tap, so do nothing.
+  if (e.type === 'pointercancel' && !d.moved) {
+    state.pendingSnapshot = null;
+    return;
+  }
   if (!d.moved) {
     state.pendingSnapshot = null;
     selectClip(clip.id);
@@ -294,9 +300,11 @@ W.tlContent.addEventListener('pointerdown', (e) => {
   const up = () => {
     window.removeEventListener('pointermove', move);
     window.removeEventListener('pointerup', up);
+    window.removeEventListener('pointercancel', up);
   };
   window.addEventListener('pointermove', move);
   window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', up);
 });
 
 // ---------- Zoom ----------

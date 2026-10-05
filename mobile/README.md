@@ -15,8 +15,12 @@ anything here.
 | Chromium                                  | WebKit (Safari's engine)                        |
 
 - `scripts/build-mobile.js` copies `renderer/` and `assets/` into `www/` and adds the phone bridge.
-- `mobile/bridge.js` — the iPhone version of all 23 bridge functions.
-- `mobile/mobile.css` — phone-only CSS (safe areas, no tap highlight).
+- `mobile/bridge.js` — the iPhone version of all 25 bridge functions.
+- `mobile/phone-layout.js` + `mobile/mobile.css` — the phone editor: player on
+  top, timeline below, every PC tool on a rail down the right side. Tool
+  panels are "cut open" from the rail by a gold blade line. Pinch the
+  timeline to zoom; tap a clip to select it, then drag it or its edges.
+  iPads keep the full desktop workspace.
 - `ios/` — the Xcode project Capacitor generated (Swift Package Manager, no CocoaPods).
 - `.github/workflows/build-ios.yml` — builds on GitHub's Macs, runs it on a simulated iPhone, saves a screenshot.
 
@@ -32,12 +36,31 @@ projects (saved to Files > On My iPhone > 9jaCut and the share sheet).
 1. **Export** — needs a native ffmpeg plugin using Apple's hardware encoder
    (`h264_videotoolbox`) and an LGPL ffmpeg build. The command builders in
    `clip-export.js` / `promo-export.js` are reused as they are.
-2. **Phone layout** — for now the desktop workspace is shown scaled to fit
-   (best in landscape).
-3. **Captions** — native sherpa-onnx plugin, tiny model by default.
-4. **Imported videos are not kept between app launches yet** — reopening a
+2. **Captions** — native sherpa-onnx plugin, tiny model by default.
+3. **Imported videos are not kept between app launches yet** — reopening a
    saved project asks you to import its videos again.
-5. **Signed builds / TestFlight** — needs the Apple Developer account.
+
+## Getting it on your iPhone (TestFlight)
+
+The `testflight` job in `build-ios.yml` signs the app and uploads it to
+TestFlight on every push to `ios`, once these are set up (one time):
+
+1. **App Store Connect > Apps > + > New App**: platform iOS, name 9jaCut,
+   bundle ID `com.ninejacut.app` (register it first under
+   developer.apple.com > Identifiers if it is not in the list), SKU `9jacut`.
+2. **App Store Connect > Users and Access > Integrations > App Store Connect API**:
+   create a key with the **Admin** role (it needs to create signing certificates). Download the `.p8` file (only
+   possible once) and note the **Key ID** and **Issuer ID**.
+3. **GitHub > chriztool/9jacut > Settings > Secrets and variables > Actions**,
+   add four secrets:
+   - `APPLE_TEAM_ID` — developer.apple.com > Account > Membership details > Team ID
+   - `ASC_KEY_ID` — the Key ID
+   - `ASC_ISSUER_ID` — the Issuer ID
+   - `ASC_KEY_P8` — open the `.p8` file in Notepad and paste all of it
+4. Push to `ios` (or re-run the latest **Build iOS app** run). When Apple has
+   processed the build, install **TestFlight** from the App Store on your
+   iPhone; 9jaCut appears there for you (add yourself under the app's
+   TestFlight tab > Internal testing if it doesn't).
 
 ## Commands
 

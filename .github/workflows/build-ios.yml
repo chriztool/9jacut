@@ -85,3 +85,95 @@ jobs:
             9jaCut-simulator.zip
           if-no-files-found: ignore
           retention-days: 14
+
+  # Signed build uploaded to TestFlight, so it can be installed on a real
+  # iPhone with Apple's TestFlight app. Skipped until these repository
+  # secrets exist (Settings > Secrets and variables > Actions):
+  #   APPLE_TEAM_ID           your 10-character Team ID (developer.apple.com > Account > Membership)
+  #   ASC_KEY_ID              App Store Connect API key ID
+  #   ASC_ISSUER_ID           App Store Connect API issuer ID
+  #   ASC_KEY_P8              the full text of the downloaded AuthKey_XXXX.p8 file
+  # The app must also exist in App Store Connect with bundle ID com.ninejacut.app.
+  testflight:
+    needs: simulator
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+    steps:
+      - name: Check the Apple keys are set up
+        id: keys
+        run: |
+          if [ -n "$APPLE_TEAM_ID" ] && [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_ISSUER_ID" ] && [ -n "$ASC_KEY_P8" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::TestFlight upload skipped: add the APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID and ASC_KEY_P8 secrets to turn it on."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.keys.outputs.ready == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.keys.outputs.ready == 'true'
+        with:
+          node-version: 22
+
+      - name: Use the newest Xcode on the machine
+        if: steps.keys.outputs.ready == 'true'
+        run: |
+          XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Install and build the phone web bundle
+        if: steps.keys.outputs.ready == 'true'
+        run: |
+          npm install --ignore-scripts
+          npm run ios:sync
+
+      - name: Build, sign and upload to TestFlight
+        if: steps.keys.outputs.ready == 'true'
+        run: |
+          set -eo pipefail
+          KEY_PATH="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          printf '%s' "$ASC_KEY_P8" > "$KEY_PATH"
+          VERSION=$(node -p "require('./package.json').version")
+          AUTH=(-allowProvisioningUpdates
+                -authenticationKeyPath "$KEY_PATH"
+                -authenticationKeyID "$ASC_KEY_ID"
+                -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+
+          xcodebuild archive \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/9jaCut.xcarchive" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            "${AUTH[@]}" | tail -30
+
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+          </dict></plist>
+          PLIST
+
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/9jaCut.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            "${AUTH[@]}" | tail -30
+          echo "::notice::Uploaded 9jaCut $VERSION (build ${{ github.run_number }}) to TestFlight. It shows up in the TestFlight app after Apple finishes processing (usually 10-30 minutes)."
+          rm -f "$KEY_PATH"

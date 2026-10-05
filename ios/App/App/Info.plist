@@ -74,6 +74,8 @@
 	<string>9jaCut uses the microphone to record voiceovers for your clips.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>9jaCut can use the camera to record a new clip to edit.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>

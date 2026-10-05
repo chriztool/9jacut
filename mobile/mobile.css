@@ -1,6 +1,17 @@
-/* Phone-only adjustments, loaded after renderer/style.css in the iPhone app.
-   The proper phone layout (player on top, timeline below, tools in a bottom
-   sheet) comes later; this file only covers the basics. */
+/* 9jaCut phone styles. Loaded after renderer/style.css in the phone app.
+   Everything here is scoped to html.is-phone-app (the phone app) or
+   html.phone-layout (phones, set by mobile/phone-layout.js), so the
+   desktop app never sees it.
+
+   Look: the desktop's warm brown + Naija gold, set in the bundled Poppins.
+   Signature motion: the "blade". Tool panels are cut open from the rail
+   by a gold line that is brightest at the height of the tool you tapped,
+   like a razor going through film. The rail's position marker is a tiny
+   green-white-green flag. */
+
+@font-face { font-family: "Poppins9jaUI"; src: url("assets/fonts/Poppins-Regular.ttf") format("truetype"); font-weight: 400; }
+@font-face { font-family: "Poppins9jaUI"; src: url("assets/fonts/Poppins-Medium.ttf") format("truetype"); font-weight: 500; }
+@font-face { font-family: "Poppins9jaUI"; src: url("assets/fonts/Poppins-Bold.ttf") format("truetype"); font-weight: 700; }
 
 html.is-phone-app,
 html.is-phone-app body {
@@ -8,18 +19,340 @@ html.is-phone-app body {
   -webkit-text-size-adjust: 100%;
   overscroll-behavior: none;
 }
-
-/* Keep clear of the notch and the home indicator. */
-html.is-phone-app body {
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-  box-sizing: border-box;
-}
-
-/* Long-press on buttons and the timeline should not pop up the text menu. */
 html.is-phone-app button,
-html.is-phone-app .timeline,
 html.is-phone-app [draggable="true"] {
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
+}
+
+/* =====================================================================
+   Phone layout
+   ===================================================================== */
+html.phone-layout {
+  --rail-w: 66px;
+  --ng-green: #008751;
+  --blade: #f3c98b;
+  --blade-hot: #fff6e3;
+  --ease-cut: cubic-bezier(0.2, 0.85, 0.2, 1);
+  --ease-flag: cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+html.phone-layout body {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  font-family: "Poppins9jaUI", -apple-system, sans-serif;
+  font-size: 14px;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+}
+/* iOS zooms into any field with text under 16px; keep fields at 16px. */
+html.phone-layout input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+html.phone-layout select,
+html.phone-layout textarea { font-size: 16px; }
+
+/* ---------- Top bar ---------- */
+html.phone-layout .topbar { padding: 6px 8px; gap: 6px; min-height: 48px; }
+html.phone-layout .brand-name { display: none; }
+html.phone-layout .brand .ng-flag { width: 22px; height: 11px; border-radius: 2px; }
+html.phone-layout .menu-btn { padding: 8px 10px; }
+html.phone-layout .project-name { flex: 1 1 0; min-width: 0; width: 0; font-weight: 500; text-overflow: ellipsis; }
+html.phone-layout .topbar { overflow: visible; }
+html.phone-layout .topbar > * { flex-shrink: 0; }
+html.phone-layout .topbar > .project-name { flex-shrink: 1; }
+html.phone-layout .kbd-hint,
+html.phone-layout #btnShortcuts { display: none; }
+html.phone-layout .topbar > .spacer { display: none; }
+html.phone-layout .actions { gap: 4px; flex: none; overflow: visible; }
+html.phone-layout .actions > * { flex-shrink: 0; }
+html.phone-layout .actions .icon-btn { width: 38px; height: 38px; }
+html.phone-layout #btnThemeToggle { display: none; }
+html.phone-layout .export-btn { padding: 9px 12px; font-weight: 700; white-space: nowrap; flex: none; }
+html.phone-layout .menu-dropdown { min-width: 240px; }
+html.phone-layout .menu-dropdown button { padding: 12px 12px; font-size: 15px; }
+html.phone-layout .phone-menu-modes { padding: 4px 4px 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+html.phone-layout .phone-menu-modes .mode-tabs { display: flex; width: 100%; }
+html.phone-layout .phone-menu-modes .mode-tab { flex: 1; justify-content: center; padding: 10px 4px; font-size: 13px; white-space: nowrap; }
+
+/* ---------- Workspace grid: player and timeline on the left, rail on the right ---------- */
+html.phone-layout #clipEditorView.workspace {
+  position: relative;
+  grid-template-columns: minmax(0, 1fr) var(--rail-w);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "player rail" "tl rail";
+  gap: 0;
+  padding: 0;
+}
+html.phone-layout .panel { border: none; border-radius: 0; }
+
+/* ---------- Player ---------- */
+html.phone-layout .player-panel { background: var(--bg); }
+html.phone-layout .player-panel .panel-head { display: none; }
+html.phone-layout .player-panel .panel-head:has(#btnBackToTimeline:not(.hidden)) { display: flex; padding: 4px 10px; min-height: 0; border: none; }
+html.phone-layout .player-panel .video-stage { flex: none; height: 36vh; height: 36dvh; margin: 0; border-radius: 0; }
+html.phone-layout .player-controls { padding: 6px 10px; gap: 8px; }
+html.phone-layout .player-controls input[type="range"] { min-width: 0; width: 100%; }
+html.phone-layout .player-controls > * { flex-shrink: 0; }
+html.phone-layout .player-controls > input[type="range"] { flex: 1 1 auto; }
+html.phone-layout .time-label { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+html.phone-layout .play-btn { width: 44px; height: 44px; font-size: 16px; }
+html.phone-layout #btnFullscreen { width: 40px; height: 40px; }
+html.phone-layout .player-panel .mark-row,
+html.phone-layout .player-panel .reframe-controls,
+html.phone-layout .player-panel .sticker-controls { margin: 0 10px 8px; flex-wrap: wrap; gap: 6px; }
+html.phone-layout .mark-row .btn { padding: 9px 12px; }
+html.phone-layout .drop-hint { font-size: 14px; padding: 0 24px; text-align: center; }
+
+/* Things you drag on the video: the finger should move them, not the page. */
+html.phone-layout .text-item,
+html.phone-layout .sticker-layer > *,
+html.phone-layout .crop-overlay { touch-action: none; }
+
+/* ---------- Timeline ---------- */
+html.phone-layout .timeline-panel { border-top: 1px solid var(--border); }
+html.phone-layout .tl-toolbar { gap: 2px; padding: 4px 6px; overflow-x: auto; scrollbar-width: none; }
+html.phone-layout .tl-toolbar::-webkit-scrollbar { display: none; }
+html.phone-layout .tl-toolbar .icon-btn { width: 42px; height: 40px; flex: none; }
+html.phone-layout .tl-toolbar .btn.small { padding: 9px 12px; flex: none; }
+html.phone-layout #tlZoom,
+html.phone-layout #tlInfo { display: none; }
+html.phone-layout .tl-heads { width: 30px; }
+/* Swipe scrolls the timeline; pinch zooms it (handled in phone-layout.js). */
+html.phone-layout .tl-scroll { touch-action: pan-x; -webkit-overflow-scrolling: touch; }
+html.phone-layout .tl-ruler { touch-action: none; }
+/* Tap a clip to select it; then the selected clip can be dragged and trimmed. */
+html.phone-layout .tl-clip.selected,
+html.phone-layout .tl-clip.selected .tl-trim { touch-action: none; }
+html.phone-layout .tl-clip .tl-trim { width: 16px; }
+html.phone-layout .tl-clip.selected .tl-trim.l { border-radius: 4px 0 0 4px; }
+html.phone-layout .tl-clip.selected .tl-trim.r { border-radius: 0 4px 4px 0; }
+
+/* The split "cut": the playhead flares white and snaps back. */
+html.phone-layout .tl-playhead.cut-flash { animation: cut-flash 320ms var(--ease-cut); }
+@keyframes cut-flash {
+  0% { background: var(--blade-hot); box-shadow: 0 0 0 0 rgba(255, 246, 227, 0.9); transform: scaleX(1); }
+  35% { background: var(--blade-hot); box-shadow: 0 0 14px 4px rgba(243, 201, 139, 0.75); transform: scaleX(2.5); }
+  100% { box-shadow: 0 0 0 0 rgba(243, 201, 139, 0); transform: scaleX(1); }
+}
+
+/* ---------- Status line ---------- */
+html.phone-layout .statusbar {
+  padding: 4px 12px calc(4px + env(safe-area-inset-bottom));
+  font-size: 11.5px;
+  min-height: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- The tool rail ---------- */
+html.phone-layout .phone-rail {
+  grid-area: rail;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--topbar);
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  padding: 4px 0 8px;
+  z-index: 40;
+}
+html.phone-layout .phone-rail::-webkit-scrollbar { display: none; }
+html.phone-layout .phone-rail .tool-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  border: none;
+}
+html.phone-layout .phone-rail button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 56px;
+  width: 100%;
+  padding: 6px 2px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: var(--text-dim);
+  font: 500 10px/1.1 "Poppins9jaUI", sans-serif;
+  letter-spacing: 0.01em;
+  transition: color 160ms ease, transform 120ms ease;
+}
+html.phone-layout .phone-rail button svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* On the phone only the open tool is highlighted (desktop keeps "active"). */
+html.phone-layout .phone-rail .tool-tabs button.active { background: none; color: var(--text-dim); font-weight: 500; }
+html.phone-layout .phone-rail button.is-open,
+html.phone-layout .phone-rail .tool-tabs button.is-open { color: var(--accent); font-weight: 700; }
+html.phone-layout .phone-rail button:active { transform: scale(0.9); }
+html.phone-layout .phone-rail .rail-edit { color: var(--text); border-bottom: 1px solid var(--border); }
+
+/* The position marker: a tiny green-white-green flag on the rail's inner edge. */
+html.phone-layout .rail-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(to bottom, var(--ng-green) 0 33%, #fff 33% 67%, var(--ng-green) 67% 100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 340ms var(--ease-flag), height 340ms var(--ease-flag), opacity 160ms ease;
+}
+html.phone-layout .rail-indicator.on { opacity: 1; }
+
+/* ---------- The sheet tool panels open in ---------- */
+html.phone-layout .phone-sheet {
+  position: absolute;
+  top: var(--sheet-top, 45%);
+  left: 0;
+  right: var(--rail-w);
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-top: 1px solid var(--border-soft);
+  box-shadow: 0 -12px 30px var(--shadow);
+  transition: translate 160ms ease;
+}
+html.phone-layout .phone-sheet[hidden] { display: none; }
+html.phone-layout .sheet-grip {
+  position: relative;
+  flex: none;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+}
+html.phone-layout .grip-bar { width: 38px; height: 4px; border-radius: 2px; background: var(--border-soft); }
+html.phone-layout .sheet-close {
+  position: absolute;
+  right: 4px;
+  top: 0;
+  width: 44px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+}
+html.phone-layout .sheet-close svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+html.phone-layout .sheet-body { position: relative; flex: 1; min-height: 0; }
+html.phone-layout .sheet-body > .panel {
+  position: absolute;
+  inset: 0;
+  display: none;
+  background: transparent;
+}
+html.phone-layout .phone-sheet[data-pane="tool"] .left-panel,
+html.phone-layout .phone-sheet[data-pane="details"] .right-panel { display: flex; }
+html.phone-layout .left-body { padding: 0 14px 20px; font-size: 14px; }
+html.phone-layout .lp-head h3 { font-size: 17px; font-weight: 700; }
+html.phone-layout .lp-sub { font-size: 13px; }
+html.phone-layout .right-panel .panel-head { padding: 0 14px 6px; border: none; font-size: 15px; min-height: 0; }
+html.phone-layout .props-tabs { padding: 0 8px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+html.phone-layout .props-tab { padding: 10px 10px; font-size: 14px; flex: none; }
+html.phone-layout .props-body { padding: 8px 14px 20px; font-size: 14px; }
+html.phone-layout .left-body .btn,
+html.phone-layout .props-body .btn { min-height: 40px; }
+
+/* The blade: a vertical line that sweeps out of the rail, brightest at the
+   height of the tool that was tapped (--blade-y, set from JS). */
+html.phone-layout .sheet-blade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: 3px;
+  margin-left: -1.5px;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(243, 201, 139, 0) 0,
+    var(--blade) calc(var(--blade-y, 50%) - 140px),
+    var(--blade-hot) var(--blade-y, 50%),
+    var(--blade) calc(var(--blade-y, 50%) + 140px),
+    rgba(243, 201, 139, 0) 100%
+  );
+  box-shadow: 0 0 12px 2px rgba(243, 201, 139, 0.55);
+}
+html.phone-layout .phone-sheet.opening { animation: sheet-open 440ms var(--ease-cut) both; }
+html.phone-layout .phone-sheet.opening .sheet-blade { animation: blade-sweep 440ms var(--ease-cut) both; }
+html.phone-layout .phone-sheet.closing { animation: sheet-close 300ms cubic-bezier(0.5, 0, 0.75, 0) both; }
+html.phone-layout .phone-sheet.closing .sheet-blade { animation: blade-return 300ms cubic-bezier(0.5, 0, 0.75, 0) both; }
+html.phone-layout .phone-sheet.recut .sheet-body { animation: sheet-recut 300ms var(--ease-cut) both; }
+html.phone-layout .phone-sheet.recut .sheet-blade { animation: blade-sweep 300ms var(--ease-cut) both; }
+
+@keyframes sheet-open {
+  from { clip-path: inset(0 0 0 100%); }
+  to { clip-path: inset(0 0 0 0); }
+}
+@keyframes sheet-close {
+  from { clip-path: inset(0 0 0 0); }
+  to { clip-path: inset(0 0 0 100%); }
+}
+@keyframes sheet-recut {
+  from { clip-path: inset(0 0 0 100%); }
+  to { clip-path: inset(0 0 0 0); }
+}
+@keyframes blade-sweep {
+  0% { left: 100%; opacity: 1; }
+  80% { opacity: 1; }
+  100% { left: 0; opacity: 0; }
+}
+@keyframes blade-return {
+  0% { left: 0; opacity: 0; }
+  20% { opacity: 1; }
+  100% { left: 100%; opacity: 1; }
+}
+
+/* ---------- Other pages ---------- */
+html.phone-layout .promo-layout { flex-direction: column; overflow-y: auto; }
+html.phone-layout .promo-form-pane { width: auto; border-right: none; border-bottom: 1px solid var(--border); overflow: visible; }
+html.phone-layout .promo-gallery-pane { overflow: visible; }
+html.phone-layout .promo-filename { width: 100%; }
+html.phone-layout .about-layout { overflow-y: auto; }
+html.phone-layout .about-page { padding: 16px; }
+html.phone-layout .about-keys { display: none; }
+html.phone-layout .about-steps kbd { display: none; }
+html.phone-layout .modal { width: auto; max-width: calc(100vw - 24px); max-height: calc(100dvh - 40px); overflow-y: auto; }
+html.phone-layout .modal-actions .btn { min-height: 44px; flex: 1; }
+
+/* ---------- Landscape phone: video and timeline side by side ---------- */
+@media (orientation: landscape) {
+  html.phone-layout #clipEditorView.workspace {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) var(--rail-w);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "player tl rail";
+  }
+  html.phone-layout .player-panel .video-stage { flex: 1; height: auto; }
+  html.phone-layout .timeline-panel { border-top: none; border-left: 1px solid var(--border); }
+  html.phone-layout .phone-sheet { top: 0; left: auto; width: min(420px, 55%); border-top: none; border-left: 1px solid var(--border-soft); }
+}
+
+/* ---------- People who turn off motion get no sweeps or springs ---------- */
+@media (prefers-reduced-motion: reduce) {
+  html.phone-layout .phone-sheet,
+  html.phone-layout .phone-sheet .sheet-body,
+  html.phone-layout .sheet-blade,
+  html.phone-layout .tl-playhead { animation: none !important; }
+  html.phone-layout .rail-indicator,
+  html.phone-layout .phone-rail button { transition: none; }
 }

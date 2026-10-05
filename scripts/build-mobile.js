@@ -6,6 +6,8 @@
 //     preload.js + main.js; the phone gets it from this file instead).
 //   - promo-templates.js is loaded as a plain browser script.
 //   - stickers and fonts are copied next to the page.
+//   - mobile/phone-layout.js + mobile/mobile.css turn the workspace into the
+//     phone editor (tool rail on the side, panels that slide out of it).
 //
 // Run: npm run build:mobile   (then: npx cap sync ios)
 
@@ -31,6 +33,12 @@ copyDir(path.join(root, 'renderer'), out);
 copyDir(path.join(root, 'assets'), path.join(out, 'assets'));
 fs.copyFileSync(path.join(root, 'mobile', 'bridge.js'), path.join(out, 'mobile-bridge.js'));
 fs.copyFileSync(path.join(root, 'mobile', 'mobile.css'), path.join(out, 'mobile.css'));
+fs.copyFileSync(path.join(root, 'mobile', 'phone-layout.js'), path.join(out, 'phone-layout.js'));
+
+// style.css points at ../assets/ (renderer/ sits next to assets/ on desktop);
+// in www/ the assets folder is beside the page.
+const cssPath = path.join(out, 'style.css');
+fs.writeFileSync(cssPath, fs.readFileSync(cssPath, 'utf8').split('../assets/').join('assets/'));
 
 // promo-templates.js is CommonJS; wrap it so it runs as a browser script and
 // exposes its exports as window.NineJaCutPromoTemplates.
@@ -42,9 +50,9 @@ fs.writeFileSync(
 
 let html = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
 const headExtras = [
-  // Temporary: until the phone layout is built, show the full desktop
-  // workspace scaled down to fit the screen (best in landscape).
-  '<meta name="viewport" content="width=1180, viewport-fit=cover" />',
+  // Phones get the phone layout (mobile/phone-layout.js); iPads get the
+  // desktop workspace at their real width.
+  '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />',
   '<link rel="stylesheet" href="mobile.css" />',
 ].join('\n  ');
 html = html.replace('<link rel="stylesheet" href="style.css" />', `<link rel="stylesheet" href="style.css" />\n  ${headExtras}`);
@@ -57,6 +65,10 @@ if (!html.includes('<script src="renderer.js"></script>')) {
   throw new Error('renderer/index.html changed: could not find where to add the phone bridge.');
 }
 html = html.replace('<script src="renderer.js"></script>', `${bridgeScripts}\n  <script src="renderer.js"></script>`);
+if (!html.includes('<script src="workspace-app.js"></script>')) {
+  throw new Error('renderer/index.html changed: could not find where to add the phone layout.');
+}
+html = html.replace('<script src="workspace-app.js"></script>', '<script src="workspace-app.js"></script>\n  <script src="phone-layout.js"></script>');
 fs.writeFileSync(path.join(out, 'index.html'), html);
 
 console.log(`Phone web bundle built in ${path.relative(root, out)}/ (version ${pkg.version})`);

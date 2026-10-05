@@ -47,6 +47,123 @@ function makeTestVideo() {
   return file;
 }
 
+
+// Simulates the phone's file picker: the next time the bridge opens it, the
+// given test video is "chosen". Then presses the real Import button.
+function importTestVideo(js, videoB64) {
+  return js(`
+    (() => {
+      const bin = atob(${JSON.stringify(videoB64)});
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      window.__nextPick = [new File([bytes], 'phone-test.mp4', { type: 'video/mp4' })];
+      if (!window.__pickerPatched) {
+        window.__pickerPatched = true;
+        const realClick = HTMLInputElement.prototype.click;
+        HTMLInputElement.prototype.click = function () {
+          if (this.type !== 'file') return realClick.call(this);
+          const dt = new DataTransfer();
+          for (const f of window.__nextPick || []) dt.items.add(f);
+          this.files = dt.files;
+          setTimeout(() => this.dispatchEvent(new Event('change')), 0);
+        };
+      }
+      document.getElementById('btnOpenVideo').click();
+    })()
+  `);
+}
+
+async function shoot(win, outDir, name) {
+  await sleep(600);
+  const img = await win.webContents.capturePage();
+  const file = path.join(outDir, name);
+  fs.writeFileSync(file, img.toPNG());
+  console.log(`[mobile] screenshot: ${file}`);
+}
+
+// The phone layout, at iPhone 15 size (393 x 852 points).
+async function runPhone(indexPath, videoB64) {
+  const win = new BrowserWindow({
+    width: 393, height: 852, show: true, useContentSize: true,
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  const pageErrors = [];
+  win.webContents.on('console-message', (_e, level, message) => { if (level >= 3) pageErrors.push(message); });
+  await win.loadURL(`${require('url').pathToFileURL(indexPath).href}?phone=1`);
+  await sleep(1200);
+  const js = (code) => win.webContents.executeJavaScript(code, true);
+
+  check('phone: phone layout switched on', await js('document.documentElement.classList.contains("phone-layout")'));
+  const tools = await js('[...document.querySelectorAll("#phoneRail button")].map(b => b.dataset.tab || b.dataset.phone)');
+  const expected = ['details', 'media', 'audio', 'text', 'stickers', 'effects', 'transitions', 'captions', 'filters', 'adjust', 'templates'];
+  check('phone: rail has Edit + all 10 PC tools', JSON.stringify(tools) === JSON.stringify(expected), tools.join(','));
+  const railBox = await js('(() => { const r = document.getElementById("phoneRail").getBoundingClientRect(); return { x: r.x, w: r.width, h: r.height }; })()');
+  check('phone: rail sits on the right side', railBox.x > 300 && railBox.w < 80, JSON.stringify(railBox));
+  check('phone: no sideways scrolling', await js('document.documentElement.scrollWidth <= window.innerWidth + 1'));
+  check('phone: Media opens on first launch', await js('window.nineJaCutPhone.openKey === "media" && !document.getElementById("phoneSheet").hidden'));
+  await shoot(win, outDir, 'phone-1-first-launch.png');
+
+  await importTestVideo(js, videoB64);
+  let clips = 0;
+  for (let i = 0; i < 40 && !clips; i++) { await sleep(250); clips = await js('state.clips.length'); }
+  check('phone: import puts the video on the timeline', clips >= 1);
+
+  await js('window.nineJaCutPhone.closeSheet()');
+  await sleep(500);
+  check('phone: panel closes', await js('document.getElementById("phoneSheet").hidden'));
+  await js('document.querySelector(".tl-clip").dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, clientX: 80 })); window.dispatchEvent(new PointerEvent("pointerup", { clientX: 80 }))');
+  await sleep(200);
+  check('phone: tapping a clip selects it', await js('!!document.querySelector(".tl-clip.selected")'));
+  await shoot(win, outDir, 'phone-2-timeline.png');
+
+  // Every tool on the rail opens its PC panel.
+  const opened = [];
+  for (const key of expected) {
+    await js(`document.querySelector('#phoneRail [data-${key === 'details' ? 'phone' : 'tab'}="${key}"]').click()`);
+    await sleep(80);
+    const ok = await js(`(() => {
+      const sheet = document.getElementById('phoneSheet');
+      if (sheet.hidden || window.nineJaCutPhone.openKey !== '${key}') return false;
+      const pane = sheet.querySelector('${key === 'details' ? '#propsBody' : '#leftBody'}');
+      return pane.offsetHeight > 50 && pane.textContent.trim().length > 10;
+    })()`);
+    if (ok) opened.push(key);
+  }
+  check('phone: every rail tool opens its panel', opened.length === expected.length, `opened ${opened.length}/${expected.length}`);
+  await js(`document.querySelector('#phoneRail [data-tab="text"]').click()`);
+  await sleep(600);
+  await shoot(win, outDir, 'phone-3-text-tool.png');
+  await js(`document.querySelector('#phoneRail [data-phone="details"]').click()`);
+  await sleep(600);
+  check('phone: Edit shows the selected clip details', await js('/Details · phone-test/.test(document.getElementById("propsTitle").textContent)'));
+  await shoot(win, outDir, 'phone-4-edit-clip.png');
+
+  // Tapping the open tool again closes it.
+  await js(`document.querySelector('#phoneRail [data-phone="details"]').click()`);
+  await sleep(500);
+  check('phone: tapping the open tool closes it', await js('document.getElementById("phoneSheet").hidden'));
+
+  // Promo and About are reachable from the menu.
+  await js('document.getElementById("btnMenu").click()');
+  await sleep(200);
+  check('phone: Editor / Promo / About are in the menu', await js('!!document.querySelector("#menuDropdown #tabPromoVideo") && !!document.querySelector("#menuDropdown #tabAbout")'));
+  await shoot(win, outDir, 'phone-5-menu.png');
+  await js('document.getElementById("tabPromoVideo").click()');
+  await sleep(400);
+  check('phone: Promo page fits the screen', await js('document.documentElement.scrollWidth <= window.innerWidth + 1 && !document.getElementById("promoView").classList.contains("hidden")'));
+  await shoot(win, outDir, 'phone-6-promo.png');
+  await js('document.getElementById("btnMenu").click(); document.getElementById("tabClipEditor").click()');
+
+  // Landscape.
+  win.setContentSize(852, 393);
+  await sleep(700);
+  check('phone: landscape fits the screen', await js('document.documentElement.scrollWidth <= window.innerWidth + 1'));
+  await shoot(win, outDir, 'phone-7-landscape.png');
+
+  check('phone: no errors in the page console', pageErrors.length === 0, pageErrors.slice(0, 3).join(' | '));
+  win.destroy();
+}
+
 async function run() {
   const indexPath = path.join(root, 'www', 'index.html');
   if (!fs.existsSync(indexPath)) throw new Error('www/ is missing: run `npm run build:mobile` first.');
@@ -81,23 +198,7 @@ async function run() {
   // 3. Import a video through the real "Import videos…" button. The file
   //    picker is simulated: when the bridge opens it, the test file is chosen.
   const videoB64 = fs.readFileSync(makeTestVideo()).toString('base64');
-  await js(`
-    (() => {
-      const bin = atob(${JSON.stringify(videoB64)});
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      window.__nextPick = [new File([bytes], 'phone-test.mp4', { type: 'video/mp4' })];
-      const realClick = HTMLInputElement.prototype.click;
-      HTMLInputElement.prototype.click = function () {
-        if (this.type !== 'file') return realClick.call(this);
-        const dt = new DataTransfer();
-        for (const f of window.__nextPick || []) dt.items.add(f);
-        this.files = dt.files;
-        setTimeout(() => this.dispatchEvent(new Event('change')), 0);
-      };
-      document.getElementById('btnOpenVideo').click();
-    })()
-  `);
+  await importTestVideo(js, videoB64);
   let imported = null;
   for (let i = 0; i < 40 && !imported; i++) {
     await sleep(250);
@@ -156,11 +257,15 @@ async function run() {
 
   win.show();
   await sleep(300);
-  const shot = await win.webContents.capturePage();
-  fs.writeFileSync(path.join(outDir, 'phone-build.png'), shot.toPNG());
-  console.log(`[mobile] screenshot: ${path.join(outDir, 'phone-build.png')}`);
+  await shoot(win, outDir, 'ipad-desktop-layout.png');
+  win.destroy();
+
+  await runPhone(indexPath, videoB64);
   console.log(`[mobile] ${checks - failures}/${checks} checks passed`);
 }
+
+// Keep running between the two test windows.
+app.on('window-all-closed', () => {});
 
 app.whenReady().then(run).then(() => app.exit(failures ? 1 : 0)).catch((e) => {
   console.error('[mobile] ERROR', e);

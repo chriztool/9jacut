@@ -2,7 +2,7 @@
 //
 // On desktop, window.nineJaCut comes from preload.js and is backed by
 // main.js (Electron + a bundled ffmpeg). On iPhone there is no Node.js, so
-// this file provides the same 23 functions using what the phone's web view
+// this file provides the same 25 functions using what the phone's web view
 // and Capacitor plugins can do. The interface code in renderer/ calls
 // window.nineJaCut exactly as before and does not know which one it got.
 //
