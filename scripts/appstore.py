@@ -272,7 +272,7 @@ def review_details():
     rv = META['review']
     attrs = {'contactFirstName': rv['firstName'], 'contactLastName': rv['lastName'], 'contactEmail': rv['email'],
              'demoAccountRequired': False, 'notes': rv['notes']}
-    phone = os.environ.get('REVIEW_PHONE') or rv.get('phone')
+    phone = None  # typed on the website (kept out of this public repo)
     if phone:
         attrs['contactPhone'] = phone
     try:
@@ -287,7 +287,7 @@ def review_details():
              'relationships': {'appStoreVersion': {'data': {'type': 'appStoreVersions', 'id': state['version']}}}}})
         has_phone = phone
     if not has_phone:
-        warn('App Review contact phone number is missing (Apple requires one)')
+        warn('App Review contact phone number is missing: add it on the website (App Review Information > Contact Information)')
 
 
 def newest_build(wait):

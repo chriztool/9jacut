@@ -1,19 +1,19 @@
 name: App Store listing
 
 # Fills in the App Store listing from mobile/appstore/ through the App Store
-# Connect API, attaches the newest build, and (if "submit" is ticked) sends
-# it to App Review. Uses the same API key as the TestFlight upload.
+# Connect API and attaches the newest build. When "submit": true is set in
+# mobile/appstore/metadata.json it then sends the version to App Review
+# (waiting up to 45 minutes for the newest build to finish processing).
+# Uses the same API key as the TestFlight upload.
 on:
-  workflow_dispatch:
-    inputs:
-      submit:
-        description: Submit for App Review when everything is filled in
-        type: boolean
-        default: false
-      phone:
-        description: App Review contact phone number (with country code)
-        type: string
-        default: ''
+  push:
+    branches: [ios]
+    paths:
+      - 'mobile/appstore/**'
+      - 'scripts/appstore.py'
+      - '.github/workflows/appstore.yml'
+
+concurrency: appstore
 
 jobs:
   listing:
@@ -21,7 +21,6 @@ jobs:
     timeout-minutes: 60
     env:
       ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
-      REVIEW_PHONE: ${{ inputs.phone }}
     steps:
       - uses: actions/checkout@v4
       - name: Read the Apple account details
@@ -29,5 +28,10 @@ jobs:
           set -a; source mobile/ios-signing.env; set +a
           for v in APPLE_TEAM_ID ASC_KEY_ID ASC_ISSUER_ID; do echo "$v=${!v}" >> "$GITHUB_ENV"; done
       - run: pip install pyjwt cryptography requests
-      - name: Fill in the listing${{ inputs.submit && ' and submit' || '' }}
-        run: python3 scripts/appstore.py ${{ inputs.submit && '--submit' || '' }}
+      - name: Fill in the listing (and submit when asked)
+        run: |
+          if python3 -c "import json,sys; sys.exit(0 if json.load(open('mobile/appstore/metadata.json')).get('submit') else 1)"; then
+            python3 scripts/appstore.py --submit
+          else
+            python3 scripts/appstore.py
+          fi

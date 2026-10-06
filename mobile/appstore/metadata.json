@@ -58,7 +58,7 @@
     "firstName": "Christian",
     "lastName": "Agbugba",
     "email": "ogemdichris@yahoo.com",
-    "phone": "",
     "notes": "9jaCut is a video editor that works fully offline; no account or sign-in is needed.\nTo try it: tap Media > Import videos and pick any video from Photos. It goes onto the timeline. Swipe in from the right edge of the screen to open the editing tools (Text, Stickers, Effects, Transitions, Filters, Adjust, Templates). Tap Export (top right) to render the video; it is saved to Photos and the share sheet opens.\nPromo videos: Menu > Promo Video, fill in a business name, add a photo, pick a style and export.\nVideo rendering uses an LGPL build of FFmpeg with Apple's hardware H.264 encoder."
-  }
+  },
+  "submit": false
 }
