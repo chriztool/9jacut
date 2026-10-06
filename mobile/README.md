@@ -10,7 +10,7 @@ anything here.
 |-------------------------------------------|------------------------------------------------|
 | `renderer/` interface                     | the same `renderer/` interface                 |
 | `window.nineJaCut` from `preload.js` + `main.js` | `window.nineJaCut` from `mobile/bridge.js` |
-| ffmpeg-static for export & thumbnails     | thumbnails/media info done in the page; export needs a native ffmpeg plugin (next step) |
+| ffmpeg-static for export & thumbnails     | FFmpegKit (our own LGPL build) in `mobile/plugins/native`; thumbnails/media info in the page |
 | sherpa-onnx-node for captions             | not yet (needs a native sherpa-onnx plugin)    |
 | Chromium                                  | WebKit (Safari's engine)                        |
 
@@ -21,24 +21,36 @@ anything here.
   panels are "cut open" from the rail by a gold blade line. Pinch the
   timeline to zoom; tap a clip to select it, then drag it or its edges.
   iPads keep the full desktop workspace.
+- `mobile/export/` — the phone export engine: the desktop's `clip-export.js`
+  and `promo-export.js`, bundled (esbuild) with phone stand-ins for `fs`,
+  `path`, `crypto` and `child_process`. x264 settings are swapped for Apple's
+  hardware encoder (`h264_videotoolbox`). So phone exports match the PC.
+- `mobile/plugins/native/` — the Swift plugin (`NineJaCutNative`): runs ffmpeg,
+  imports videos/photos/music into the app's Media folder (so they are real
+  files and survive restarts), saves exports to Photos.
+- `mobile/ffmpeg-ios/build-config.env` + `.github/workflows/build-ffmpeg-ios.yml`
+  — builds the App Store-safe FFmpeg (LGPL, freetype for text, VideoToolbox)
+  and publishes it as the `ffmpeg-ios-lgpl-*` release. `npm run ios:ffmpeg`
+  downloads it into the plugin.
 - `ios/` — the Xcode project Capacitor generated (Swift Package Manager, no CocoaPods).
-- `.github/workflows/build-ios.yml` — builds on GitHub's Macs, runs it on a simulated iPhone, saves a screenshot.
+- `.github/workflows/build-ios.yml` — builds on GitHub's Macs, runs an export
+  self-test on a simulated iPhone, saves a screenshot, and uploads to TestFlight.
 
 ## What works in this version
 
 Importing videos, music and photos (Photos / Files picker), preview and
 timeline playback, thumbnails, media info, every editing tab, stickers, promo
 templates, voiceover recording (records MP4/AAC on iPhone), saving and opening
-projects (saved to Files > On My iPhone > 9jaCut and the share sheet).
+projects (saved to Files > On My iPhone > 9jaCut and the share sheet), and
+**export**: one video or separate clips, promo videos, saved to Photos with
+the share sheet opening afterwards.
 
 ## Not yet
 
-1. **Export** — needs a native ffmpeg plugin using Apple's hardware encoder
-   (`h264_videotoolbox`) and an LGPL ffmpeg build. The command builders in
-   `clip-export.js` / `promo-export.js` are reused as they are.
-2. **Captions** — native sherpa-onnx plugin, tiny model by default.
-3. **Imported videos are not kept between app launches yet** — reopening a
-   saved project asks you to import its videos again.
+1. **Auto-captions** — needs a native sherpa-onnx plugin (tiny model by
+   default). Typing captions by hand works.
+2. **Long exports in the background** — iOS pauses apps you leave, so stay
+   on 9jaCut while a long video exports.
 
 ## Getting it on your iPhone (TestFlight)
 
@@ -68,7 +80,10 @@ TestFlight on every push to `ios`, once these are set up (one time):
 npm install
 npm run build:mobile   # build www/
 npm run ios:sync       # build www/ and copy it into the Xcode project
-npm run test:mobile    # check the phone build in Chromium (needs ffmpeg; on Linux use xvfb-run)
+npm run ios:ffmpeg     # download the iPhone FFmpeg into the native plugin
+npm run test:mobile    # phone layout + bridge in Chromium (needs ffmpeg; on Linux use xvfb-run)
+npm run test:mobile-export   # real exports through the phone engine (needs ffmpeg)
+npx electron test/mobile-native-test.js   # the iPhone app's path with a stand-in native layer
 ```
 
 Building the iPhone app itself needs a Mac — GitHub's are used: push to the

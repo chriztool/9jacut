@@ -1,0 +1,16 @@
+{
+  "name": "ninejacut-native",
+  "version": "1.0.0",
+  "private": true,
+  "description": "9jaCut's native iPhone layer: ffmpeg (FFmpegKit, LGPL), media import, save to Photos.",
+  "license": "MIT",
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    }
+  },
+  "files": [
+    "ios/Sources",
+    "Package.swift"
+  ]
+}

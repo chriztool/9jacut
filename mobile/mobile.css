@@ -356,3 +356,7 @@ html.phone-layout .modal-actions .btn { min-height: 44px; flex: 1; }
   html.phone-layout .rail-indicator,
   html.phone-layout .phone-rail button { transition: none; }
 }
+
+/* Exports save to Photos on a phone: no folder to choose. */
+html.phone-layout #btnExportFolder,
+html.phone-layout #btnPromoExportFolder { display: none; }

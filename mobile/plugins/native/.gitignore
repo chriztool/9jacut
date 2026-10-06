@@ -1,0 +1,4 @@
+# Downloaded by `npm run ios:ffmpeg` (scripts/fetch-ffmpeg-ios.sh)
+ios/Frameworks/
+ios/Sources/FFmpegKit/
+ios/Sources/CFFmpegBridge/

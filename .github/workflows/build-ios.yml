@@ -1,8 +1,9 @@
 # Builds the iPhone app on GitHub's Mac machines, so no Mac is needed.
 #
-# Right now (no Apple Developer account yet) it builds for the iPhone
-# SIMULATOR, starts the app on a simulated iPhone, and saves a screenshot.
-# That proves the app compiles and runs in Safari's engine (WebKit).
+# The simulator job builds for the iPhone SIMULATOR, starts the app on a
+# simulated iPhone, runs a real export self-test through the native ffmpeg
+# plugin, and saves a screenshot. FFmpeg comes from the ffmpeg-ios-lgpl-*
+# release made by build-ffmpeg-ios.yml.
 #
 # Once the Apple Developer account is ready, a signed build + TestFlight
 # upload gets added here so the app can go on a real iPhone.
@@ -53,20 +54,41 @@ jobs:
             build | tail -40
           test -d build/Build/Products/Debug-iphonesimulator/App.app
 
-      - name: Start the app on a simulated iPhone and take a screenshot
+      - name: Start a simulated iPhone
         run: |
           DEVICE=$(xcrun simctl list devices available -j \
             | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; \
               print(next(x['udid'] for k in sorted(d, reverse=True) if 'iOS' in k for x in d[k] if x['name'].startswith('iPhone')))")
-          echo "Simulator: $DEVICE"
+          echo "DEVICE=$DEVICE" >> "$GITHUB_ENV"
           xcrun simctl boot "$DEVICE"
           xcrun simctl bootstatus "$DEVICE" -b
           xcrun simctl install "$DEVICE" build/Build/Products/Debug-iphonesimulator/App.app
-          xcrun simctl launch "$DEVICE" com.ninejacut.app
+
+      # The app makes a test video with ffmpeg and exports it with text, a
+      # sticker and a look through the native plugin (mobile/bridge.js,
+      # runSelfTest), then prints 9JACUT_SELFTEST PASS or FAIL.
+      - name: Export self-test on the simulated iPhone
+        run: |
+          xcrun simctl launch --console-pty --terminate-running-process "$DEVICE" com.ninejacut.app -NineJaCutSelfTest > selftest-log.txt 2>&1 &
+          LAUNCH=$!
+          for i in $(seq 1 90); do
+            grep -q '9JACUT_SELFTEST' selftest-log.txt && break
+            sleep 2
+          done
+          kill $LAUNCH 2>/dev/null || true
+          xcrun simctl terminate "$DEVICE" com.ninejacut.app || true
+          grep -iE 'error|9JACUT' selftest-log.txt | tail -40 || true
+          grep -q '9JACUT_SELFTEST PASS' selftest-log.txt || { echo "::error::Export self-test did not pass on the simulated iPhone"; exit 1; }
+          echo "::notice::$(grep -o '9JACUT_SELFTEST.*' selftest-log.txt | head -1)"
+
+      - name: Take a screenshot of the app
+        if: always()
+        run: |
+          [ -n "${DEVICE:-}" ] || exit 0
+          xcrun simctl launch --terminate-running-process "$DEVICE" com.ninejacut.app
           sleep 20
           xcrun simctl io "$DEVICE" screenshot ios-simulator.png
           xcrun simctl spawn "$DEVICE" log show --last 2m --predicate 'process == "App"' --style compact > ios-app-log.txt || true
-          grep -iE "error|exception|⚡️" ios-app-log.txt | head -40 || true
 
       - name: Keep the screenshot, log and simulator app
         if: always()
@@ -82,6 +104,7 @@ jobs:
           path: |
             ios-simulator.png
             ios-app-log.txt
+            selftest-log.txt
             9jaCut-simulator.zip
           if-no-files-found: ignore
           retention-days: 14

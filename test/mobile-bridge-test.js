@@ -227,7 +227,7 @@ async function run() {
 
   // 5. Export reports a clear "not yet" message instead of failing silently.
   const exp = await js('window.nineJaCut.exportClips({ clips: state.clips.map(c => ({ id: c.id, name: c.name })), settings: { combine: true } })');
-  check('export explains it is coming next', exp[0] && exp[0].ok === false && /next part/.test(exp[0].error));
+  check('export in a web browser explains where it works', exp[0] && exp[0].ok === false && /iPhone app/.test(exp[0].error));
 
   // 6. Save project downloads JSON (desktop browser path), and it opens again.
   let savedJson = null;

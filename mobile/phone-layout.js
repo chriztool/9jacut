@@ -262,6 +262,29 @@
     new MutationObserver(() => phoneWords(box)).observe(box, { childList: true, subtree: true, characterData: true });
   }
 
+  // ---------- Export saves to Photos: no folder to choose on a phone ----------
+  const PHOTOS = 'Photos';
+  state.exportFolder = PHOTOS;
+  promoState.exportFolder = PHOTOS;
+  for (const id of ['btnExportFolder', 'btnPromoExportFolder']) { const b = $(id); if (b) b.hidden = true; }
+  for (const id of ['exportFolderLabel', 'promoExportFolderLabel']) { const l = $(id); if (l) l.textContent = 'Saves to your Photos'; }
+  if (typeof refreshPromoExportEnabled === 'function') refreshPromoExportEnabled();
+  // openExportDialog() writes the folder into the label; keep the phone wording.
+  const exportLabel = $('exportFolderLabel');
+  new MutationObserver(() => {
+    if (exportLabel.textContent !== 'Saves to your Photos') exportLabel.textContent = 'Saves to your Photos';
+  }).observe(exportLabel, { childList: true, characterData: true, subtree: true });
+
+  // "Saved /var/mobile/.../Exports/My video.mp4" -> "Saved to Photos: My video.mp4"
+  const tidyPaths = (el) => {
+    const tidy = el.textContent.replace(/Saved (?:to )?(\/[^\n]*\/)([^/\n]+\.mp4)/g, 'Saved to Photos: $2');
+    if (tidy !== el.textContent) el.textContent = tidy;
+  };
+  for (const id of ['exportStatus', 'statusBar', 'promoStatus']) {
+    const el = $(id);
+    if (el) new MutationObserver(() => tidyPaths(el)).observe(el, { childList: true, characterData: true, subtree: true });
+  }
+
   // ---------- Keep things in place ----------
   const relayout = () => { placeSheet(); markOpen(); };
   window.addEventListener('resize', relayout);

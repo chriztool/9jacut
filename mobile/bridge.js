@@ -6,15 +6,19 @@
 // and Capacitor plugins can do. The interface code in renderer/ calls
 // window.nineJaCut exactly as before and does not know which one it got.
 //
+// In the iPhone app the NineJaCutNative plugin (mobile/plugins/native) does
+// the native work: importing media into the app's own storage, running
+// ffmpeg for export (through mobile/export/, which reuses the desktop's
+// clip-export.js and promo-export.js) and saving to Photos.
+//
 // Status:
 //   working  - import videos/music/photos, preview, thumbnails, media info,
 //              stickers, promo templates, voiceover recording, save/open
-//              project, about page, copy text
-//   next     - exporting (needs a native ffmpeg plugin, see mobile/README.md)
+//              project, export (iPhone app), about page, copy text
 //   later    - auto-captions (needs a native sherpa-onnx plugin)
 //
-// It also runs in an ordinary desktop browser, which is how it is tested
-// without an iPhone (see test/mobile-bridge-test.js).
+// It also runs in an ordinary desktop browser (without the native parts),
+// which is how it is tested without an iPhone (test/mobile-bridge-test.js).
 
 (function () {
   'use strict';
@@ -24,8 +28,14 @@
   const plugins = (Cap && Cap.Plugins) || {};
   const platform = isNative ? Cap.getPlatform() : 'web';
 
-  const EXPORT_NOT_READY = 'Exporting on iPhone is the next part being built. It is not in this test version yet. '
-    + 'Everything else (importing, editing, previewing, saving your project) works.';
+  // The native layer and the export engine (both only in the iPhone app).
+  const nativeKit = isNative ? plugins.NineJaCutNative : null;
+  const engine = window.NineJaCutExport;
+  if (nativeKit && engine) engine.setNative(nativeKit);
+  let pathsPromise = null;
+  const nativePaths = () => pathsPromise || (pathsPromise = nativeKit.getPaths());
+
+  const EXPORT_NOT_READY = 'Exporting works in the 9jaCut iPhone app and on the PC, not in a web browser.';
   const CAPTIONS_NOT_READY = 'Auto-captions are not on iPhone yet. You can still type captions by hand in the Captions tab.';
 
   // ---------- Imported files ----------
@@ -40,6 +50,55 @@
     const entry = { blob, url: URL.createObjectURL(blob), name: safeName, type: blob.type || '' };
     files.set(filePath, entry);
     return { filePath, fileUrl: entry.url, fileName: safeName, mime: entry.type };
+  }
+
+  // A file the native layer stored in the app's Media folder.
+  function registerNative(file) {
+    const entry = { url: Cap.convertFileSrc(file.path), name: file.name, type: file.mime || '', native: true };
+    files.set(file.path, entry);
+    return { filePath: file.path, fileUrl: entry.url, fileName: file.name, mime: entry.type };
+  }
+
+  async function pickNative(kind, multiple) {
+    const result = await nativeKit.pickMedia({ kind, multiple });
+    return (result.files || []).map(registerNative);
+  }
+
+  function toBase64(bytes) {
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+
+  // Saved projects hold full file paths. The app's folder moves when the app
+  // is updated, so look each Media file up again when a project is opened.
+  async function refreshPaths(project) {
+    const found = new Set();
+    const walk = (v) => {
+      if (typeof v === 'string') { if (v.startsWith('/') && v.includes('/Media/')) found.add(v); return; }
+      if (v && typeof v === 'object') for (const k of Object.keys(v)) walk(v[k]);
+    };
+    walk(project);
+    if (!found.size) return project;
+    const list = [...found];
+    const { paths } = await nativeKit.resolveMedia({ paths: list });
+    const map = new Map(list.map((p, i) => [p, paths[i] || p]));
+    const fix = (v) => {
+      if (typeof v === 'string') return map.get(v) || v;
+      if (Array.isArray(v)) return v.map(fix);
+      if (v && typeof v === 'object') { for (const k of Object.keys(v)) v[k] = fix(v[k]); }
+      return v;
+    };
+    return fix(project);
+  }
+
+  // Exported videos go to Photos; the share sheet opens when the interface
+  // asks to "open the folder".
+  let lastExports = [];
+  async function afterExport(outPaths) {
+    lastExports = outPaths;
+    if (!outPaths.length) return;
+    try { await nativeKit.saveToPhotos({ paths: outPaths }); } catch (e) { console.warn('Could not save to Photos', e); }
   }
 
   function urlFor(filePath) {
@@ -193,27 +252,49 @@
     platform,
 
     selectVideo: async () => {
+      if (nativeKit) return (await pickNative('video', false))[0] || null;
       const [f] = await pickFiles({ accept: VIDEO_ACCEPT, multiple: false });
       return f ? register(f, f.name) : null;
     },
     selectAudio: async () => {
+      if (nativeKit) return (await pickNative('audio', false))[0] || null;
       const [f] = await pickFiles({ accept: AUDIO_ACCEPT, multiple: false });
       return f ? register(f, f.name) : null;
     },
-    selectVideos: async () => (await pickFiles({ accept: VIDEO_ACCEPT, multiple: true })).map((f) => register(f, f.name)),
-    selectAudioFiles: async () => (await pickFiles({ accept: AUDIO_ACCEPT, multiple: true })).map((f) => register(f, f.name)),
-    selectPromoMedia: async () => (await pickFiles({ accept: 'image/*,video/*', multiple: true })).map((f) => {
-      const r = register(f, f.name);
-      return { ...r, type: (f.type || '').startsWith('video/') || /\.(mp4|mov|m4v)$/i.test(f.name) ? 'video' : 'image' };
-    }),
+    selectVideos: async () => {
+      if (nativeKit) return pickNative('video', true);
+      return (await pickFiles({ accept: VIDEO_ACCEPT, multiple: true })).map((f) => register(f, f.name));
+    },
+    selectAudioFiles: async () => {
+      if (nativeKit) return pickNative('audio', true);
+      return (await pickFiles({ accept: AUDIO_ACCEPT, multiple: true })).map((f) => register(f, f.name));
+    },
+    selectPromoMedia: async () => {
+      const isVideo = (name, mime) => (mime || '').startsWith('video/') || /\.(mp4|mov|m4v)$/i.test(name);
+      if (nativeKit) return (await pickNative('visual', true)).map((r) => ({ ...r, type: isVideo(r.fileName, r.mime) ? 'video' : 'image' }));
+      return (await pickFiles({ accept: 'image/*,video/*', multiple: true })).map((f) => ({ ...register(f, f.name), type: isVideo(f.name, f.type) ? 'video' : 'image' }));
+    },
 
     // There are no folders to choose on a phone: finished videos will go to
     // Photos and the share sheet once exporting is added.
     selectExportFolder: async () => 'Photos (iPhone)',
-    openFolder: async () => {},
+    // After an export the interface "opens the folder": on iPhone that is
+    // the share sheet, to post straight to TikTok, WhatsApp and so on.
+    openFolder: async () => {
+      if (!isNative || !plugins.Share || !lastExports.length) return;
+      try { await plugins.Share.share({ files: lastExports.map((p) => `file://${p}`) }); } catch (e) { /* closed */ }
+    },
 
     toFileUrl: async (filePath) => urlFor(filePath),
-    probeMedia: async (filePath) => probe(filePath),
+    probeMedia: async (filePath) => {
+      try {
+        return await probe(filePath);
+      } catch (e) {
+        // Formats the web view cannot open (e.g. .mkv) can still be read by ffmpeg.
+        if (nativeKit && engine && filePath.startsWith('/')) return { ...(await engine.probeMedia(filePath)), exists: true };
+        throw e;
+      }
+    },
     generateThumbnail: async ({ sourcePath, time }) => thumbnail(sourcePath, time),
 
     getStickers: async () => STICKERS.map((key) => ({ key, fileUrl: `assets/stickers/${key}.png` })),
@@ -223,17 +304,30 @@
     loadProject: async () => {
       const [f] = await pickFiles({ accept: 'application/json,.json', multiple: false });
       if (!f) return null;
-      try { return JSON.parse(await f.text()); } catch (e) { return null; }
+      let project;
+      try { project = JSON.parse(await f.text()); } catch (e) { return null; }
+      return nativeKit ? refreshPaths(project) : project;
     },
 
     saveRecording: async ({ bytes, extension }) => {
       const ext = /^[a-z0-9]{2,5}$/i.test(extension || '') ? extension : 'm4a';
       const mime = ext === 'webm' ? 'audio/webm' : 'audio/mp4';
+      if (nativeKit) {
+        const name = `voiceover-${Date.now()}.${ext}`;
+        const { path } = await nativeKit.writeBase64({ name, data: toBase64(bytes) });
+        const r = registerNative({ path, name, mime });
+        return { filePath: r.filePath, fileUrl: r.fileUrl };
+      }
       const r = register(new Blob([bytes], { type: mime }), `voiceover-${Date.now()}.${ext}`);
       return { filePath: r.filePath, fileUrl: r.fileUrl };
     },
 
     exportClips: async ({ clips, settings = {} }) => {
+      if (nativeKit && engine) {
+        const results = await engine.exportClips({ clips, settings }, await nativePaths(), (d) => emit('export', d));
+        await afterExport(results.filter((r) => r.ok).map((r) => r.outPath));
+        return results;
+      }
       if (settings.combine) {
         emit('export', { id: 'combined', status: 'error', message: EXPORT_NOT_READY });
         return [{ id: 'combined', ok: false, error: EXPORT_NOT_READY }];
@@ -245,7 +339,13 @@
     },
     onExportProgress: (cb) => subscribe('export', cb),
 
-    exportPromo: async ({ presetId }) => {
+    exportPromo: async (job) => {
+      if (nativeKit && engine) {
+        const result = await engine.exportPromo(job, await nativePaths(), (d) => emit('promo', d));
+        await afterExport(result.ok ? [result.outPath] : []);
+        return result;
+      }
+      const { presetId } = job;
       emit('promo', { id: presetId || 'promo', status: 'error', message: EXPORT_NOT_READY });
       return { ok: false, error: EXPORT_NOT_READY };
     },
@@ -277,6 +377,47 @@
       }
     },
   };
+
+  // ---------- Export self-test (CI only) ----------
+  // The iOS build launches the app on a simulated iPhone with
+  // -NineJaCutSelfTest. It then makes a test video with ffmpeg, exports it
+  // with text, a sticker and a look through the real plugin, checks the
+  // result and prints one line the build looks for. Never runs otherwise.
+  async function runSelfTest(paths) {
+    const report = { ok: false, steps: [] };
+    try {
+      const src = `${paths.tmp.replace(/\/$/, '')}/selftest-source.mov`;
+      // Written with x264 settings and swapped to the phone's encoder, like every export.
+      const gen = await nativeKit.run({ jobId: 'selftest-gen', args: engine.phoneVideoArgs(['-y', '-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=30:duration=3',
+        '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
+        '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', src]) });
+      report.steps.push(`make test video: ${gen.returnCode}`);
+      if (gen.returnCode !== 0) throw new Error('could not make the test video');
+      const info = await engine.probeMedia(src);
+      report.steps.push(`probe: ${info.width}x${info.height} ${info.duration}s audio=${info.hasAudio}`);
+      const results = await engine.exportClips({
+        clips: [{
+          id: 'selftest', name: 'selftest', sourcePath: src, start: 0.5, end: 2.5,
+          look: { preset: 'gold' },
+          texts: [{ text: "Self-test: 9ja's text", position: 'bottom', size: 7, style: 'box' }],
+          stickers: [{ key: 'fire', x: 100, y: 100, size: 120, start: 0, end: 2 }],
+        }],
+        settings: { resolution: '720', quality: 'standard' },
+      }, paths, () => {});
+      const r = results[0];
+      report.steps.push(`export: ${r.ok ? 'ok' : r.error}`);
+      if (!r.ok) throw new Error(r.error);
+      const out = await engine.probeMedia(r.outPath);
+      report.steps.push(`result: ${out.width}x${out.height} ${out.duration}s audio=${out.hasAudio}`);
+      report.ok = out.width === 1280 && out.height === 720 && Math.abs(out.duration - 2) < 0.3 && out.hasAudio;
+    } catch (e) {
+      report.steps.push(`error: ${e && e.message}`);
+    }
+    console.log(`9JACUT_SELFTEST ${report.ok ? 'PASS' : 'FAIL'} ${JSON.stringify(report.steps)}`);
+  }
+  if (nativeKit && engine) {
+    nativePaths().then((p) => { if (p.selfTest) setTimeout(() => runSelfTest(p), 1500); }).catch(() => {});
+  }
 
   document.documentElement.classList.add('is-phone-app', `platform-${platform}`);
 })();

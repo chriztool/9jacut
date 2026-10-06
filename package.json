@@ -8,8 +8,10 @@
     "test": "node test/export-test.js",
     "dist": "electron-builder --win",
     "build:mobile": "node scripts/build-mobile.js",
-    "ios:sync": "node scripts/build-mobile.js && npx cap sync ios",
-    "test:mobile": "node scripts/build-mobile.js && electron test/mobile-bridge-test.js"
+    "ios:sync": "bash scripts/fetch-ffmpeg-ios.sh && node scripts/build-mobile.js && npx cap sync ios",
+    "test:mobile": "node scripts/build-mobile.js && electron test/mobile-bridge-test.js",
+    "ios:ffmpeg": "bash scripts/fetch-ffmpeg-ios.sh",
+    "test:mobile-export": "node scripts/build-mobile.js && node test/mobile-export-test.js"
   },
   "author": "",
   "license": "MIT",
@@ -20,7 +22,9 @@
     "@capacitor/ios": "^8.5.2",
     "@capacitor/share": "^8.0.3",
     "electron": "^31.0.0",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "esbuild": "^0.25.12",
+    "ninejacut-native": "file:mobile/plugins/native"
   },
   "dependencies": {
     "ffmpeg-static": "^5.2.0",

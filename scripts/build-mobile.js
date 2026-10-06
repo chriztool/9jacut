@@ -59,6 +59,7 @@ html = html.replace('<link rel="stylesheet" href="style.css" />', `<link rel="st
 const bridgeScripts = [
   `<script>window.NINEJACUT_VERSION = ${JSON.stringify(pkg.version)};</script>`,
   '<script src="promo-templates.js"></script>',
+  '<script src="mobile-export.js"></script>',
   '<script src="mobile-bridge.js"></script>',
 ].join('\n  ');
 if (!html.includes('<script src="renderer.js"></script>')) {
@@ -70,5 +71,23 @@ if (!html.includes('<script src="workspace-app.js"></script>')) {
 }
 html = html.replace('<script src="workspace-app.js"></script>', '<script src="workspace-app.js"></script>\n  <script src="phone-layout.js"></script>');
 fs.writeFileSync(path.join(out, 'index.html'), html);
+
+// The phone export engine: the desktop's clip-export.js / promo-export.js,
+// bundled with phone stand-ins for fs, path, crypto and child_process
+// (mobile/export/shims.js), exposed as window.NineJaCutExport.
+const NODE_MODULES = ['fs', 'path', 'crypto', 'child_process'];
+require('esbuild').buildSync({
+  absWorkingDir: root,
+  entryPoints: ['mobile/export/entry.js'],
+  outfile: path.join(out, 'mobile-export.js'),
+  bundle: true,
+  format: 'iife',
+  globalName: 'NineJaCutExport',
+  platform: 'browser',
+  target: ['safari15'],
+  legalComments: 'none',
+  logLevel: 'warning',
+  alias: Object.fromEntries(NODE_MODULES.map((m) => [m, `./mobile/export/node/${m}.js`])),
+});
 
 console.log(`Phone web bundle built in ${path.relative(root, out)}/ (version ${pkg.version})`);
