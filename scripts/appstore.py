@@ -298,7 +298,9 @@ def review_details():
 def newest_build(wait):
     deadline = time.time() + (45 * 60 if wait else 0)
     while True:
-        bs = call('GET', f"/v1/builds?filter[app]={APP}&filter[preReleaseVersion.version]={META['version']}&sort=-uploadedDate&limit=5")['data']
+        bs = call('GET', f"/v1/builds?filter[app]={APP}&filter[preReleaseVersion.version]={META['version']}&limit=50")['data']
+        # Highest build number = newest (the API's date sort is not reliable here).
+        bs.sort(key=lambda b: int(re.sub(r'\D', '', b['attributes']['version']) or 0), reverse=True)
         if bs:
             b = bs[0]
             st = b['attributes']['processingState']
