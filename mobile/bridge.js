@@ -421,7 +421,28 @@
         out = await limit(engine.probeMedia(r.outPath), 'reading the exported video');
         step(`result ${name}: ${out.width}x${out.height} ${out.duration}s audio=${out.hasAudio}`);
       }
-      report.ok = out.width === 1280 && out.height === 720 && Math.abs(out.duration - 2) < 0.3 && out.hasAudio;
+      const exportsOk = out.width === 1280 && out.height === 720 && Math.abs(out.duration - 2) < 0.3 && out.hasAudio;
+
+      // Playback in the app's own player: play to the end, then play again
+      // (on iPhone the second play used to stop straight away).
+      const lastOut = `${paths.exports.replace(/\/$/, '')}/selftest-sticker_original.mp4`;
+      const added = registerNative({ path: lastOut, name: 'selftest-playback.mp4', mime: 'video/mp4' });
+      await importVideos([added]);
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      for (let i = 0; i < 40 && !state.clips.length; i++) await sleep(100);
+      const player = document.getElementById('preview');
+      player.muted = true;
+      const total = timelineDuration();
+      await playTimeline();
+      for (let i = 0; i < 100 && ws.playing; i++) await sleep(100);
+      const firstEnd = ws.time;
+      step(`play once: reached ${firstEnd.toFixed(2)}s of ${total.toFixed(2)}s`);
+      await playTimeline();
+      await sleep(900);
+      const replaying = ws.playing && ws.time > 0.2 && ws.time < total;
+      step(`play again: ${replaying ? 'plays' : 'stopped'} at ${ws.time.toFixed(2)}s`);
+      pauseTimeline();
+      report.ok = exportsOk && Math.abs(firstEnd - total) < 0.3 && replaying;
     } catch (e) {
       step(`error: ${e && e.message}`);
     }

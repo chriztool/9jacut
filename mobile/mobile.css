@@ -73,14 +73,15 @@ html.phone-layout .phone-menu-modes { padding: 4px 4px 8px; border-bottom: 1px s
 html.phone-layout .phone-menu-modes .mode-tabs { display: flex; width: 100%; }
 html.phone-layout .phone-menu-modes .mode-tab { flex: 1; justify-content: center; padding: 10px 4px; font-size: 13px; white-space: nowrap; }
 
-/* ---------- Workspace grid: player and timeline on the left, rail on the right ---------- */
+/* ---------- Workspace: player on top, timeline below (the rail slides over them) ---------- */
 html.phone-layout #clipEditorView.workspace {
   position: relative;
-  grid-template-columns: minmax(0, 1fr) var(--rail-w);
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
-  grid-template-areas: "player rail" "tl rail";
+  grid-template-areas: "player" "tl";
   gap: 0;
   padding: 0;
+  overflow: hidden;
 }
 html.phone-layout .panel { border: none; border-radius: 0; }
 
@@ -88,7 +89,27 @@ html.phone-layout .panel { border: none; border-radius: 0; }
 html.phone-layout .player-panel { background: var(--bg); }
 html.phone-layout .player-panel .panel-head { display: none; }
 html.phone-layout .player-panel .panel-head:has(#btnBackToTimeline:not(.hidden)) { display: flex; padding: 4px 10px; min-height: 0; border: none; }
-html.phone-layout .player-panel .video-stage { flex: none; height: 36vh; height: 36dvh; margin: 0; border-radius: 0; }
+html.phone-layout .player-panel { position: relative; }
+html.phone-layout .player-panel .video-stage { flex: none; height: 36vh; height: var(--player-h, 36dvh); margin: 0; border-radius: 0; }
+
+/* The handle between the video and the editing area: drag to resize. */
+html.phone-layout .phone-splitter {
+  height: 18px;
+  margin-top: -4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  cursor: row-resize;
+}
+html.phone-layout .splitter-bar {
+  width: 44px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-soft);
+  transition: background 120ms ease, width 160ms var(--ease-flag);
+}
+html.phone-layout .phone-splitter.dragging .splitter-bar { background: var(--accent); width: 72px; }
 html.phone-layout .player-controls { padding: 6px 10px; gap: 8px; }
 html.phone-layout .player-controls input[type="range"] { min-width: 0; width: 100%; }
 html.phone-layout .player-controls > * { flex-shrink: 0; }
@@ -146,8 +167,15 @@ html.phone-layout .statusbar {
 
 /* ---------- The tool rail ---------- */
 html.phone-layout .phone-rail {
-  grid-area: rail;
-  position: relative;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--rail-w);
+  transform: translateX(100%);
+  visibility: hidden;
+  transition: transform 260ms var(--ease-cut), visibility 0s linear 260ms;
+  box-shadow: -10px 0 28px var(--shadow);
   display: flex;
   flex-direction: column;
   background: var(--topbar);
@@ -159,6 +187,38 @@ html.phone-layout .phone-rail {
   z-index: 40;
 }
 html.phone-layout .phone-rail::-webkit-scrollbar { display: none; }
+html.phone-layout.rail-open .phone-rail {
+  transform: none;
+  visibility: visible;
+  transition: transform 260ms var(--ease-cut), visibility 0s;
+}
+
+/* The only trace of the rail while it is hidden: a sliver on the edge. */
+html.phone-layout .rail-edge-tab {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 16px;
+  height: 64px;
+  margin-top: -32px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  z-index: 35;
+  touch-action: none;
+}
+html.phone-layout .rail-edge-tab::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  right: 2px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0.55;
+}
+html.phone-layout.rail-open .rail-edge-tab { display: none; }
 html.phone-layout .phone-rail .tool-tabs {
   display: flex;
   flex-direction: column;
@@ -218,7 +278,7 @@ html.phone-layout .phone-sheet {
   position: absolute;
   top: var(--sheet-top, 45%);
   left: 0;
-  right: var(--rail-w);
+  right: 0;
   bottom: 0;
   z-index: 30;
   display: flex;
@@ -233,6 +293,7 @@ html.phone-layout .sheet-grip {
   position: relative;
   flex: none;
   height: 30px;
+  cursor: row-resize;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -338,13 +399,27 @@ html.phone-layout .modal-actions .btn { min-height: 44px; flex: 1; }
 /* ---------- Landscape phone: video and timeline side by side ---------- */
 @media (orientation: landscape) {
   html.phone-layout #clipEditorView.workspace {
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) var(--rail-w);
+    grid-template-columns: var(--player-w, minmax(0, 1.15fr)) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
-    grid-template-areas: "player tl rail";
+    grid-template-areas: "player tl";
   }
   html.phone-layout .player-panel .video-stage { flex: 1; height: auto; }
   html.phone-layout .timeline-panel { border-top: none; border-left: 1px solid var(--border); }
   html.phone-layout .phone-sheet { top: 0; left: auto; width: min(420px, 55%); border-top: none; border-left: 1px solid var(--border-soft); }
+  /* The handle sits on the video's right edge and drags sideways. */
+  html.phone-layout .phone-splitter {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: 16px;
+    height: auto;
+    margin: 0;
+    z-index: 6;
+    cursor: col-resize;
+  }
+  html.phone-layout .splitter-bar { width: 4px; height: 44px; }
+  html.phone-layout .phone-splitter.dragging .splitter-bar { width: 4px; height: 72px; }
 }
 
 /* ---------- People who turn off motion get no sweeps or springs ---------- */
@@ -354,6 +429,8 @@ html.phone-layout .modal-actions .btn { min-height: 44px; flex: 1; }
   html.phone-layout .sheet-blade,
   html.phone-layout .tl-playhead { animation: none !important; }
   html.phone-layout .rail-indicator,
+  html.phone-layout .phone-rail,
+  html.phone-layout .splitter-bar,
   html.phone-layout .phone-rail button { transition: none; }
 }
 

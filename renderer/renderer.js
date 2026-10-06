@@ -379,12 +379,20 @@ function switchActiveSource(sourcePath) {
     }
     state.activeSourcePath = sourcePath;
     dropHint.classList.add('hidden');
+    // Resolve on error or after a few seconds too, so playback never hangs
+    // waiting for a file the player cannot read.
+    let timer = null;
     const onLoaded = () => {
+      clearTimeout(timer);
       video.removeEventListener('loadedmetadata', onLoaded);
+      video.removeEventListener('error', onLoaded);
       resolve();
     };
     video.addEventListener('loadedmetadata', onLoaded);
+    video.addEventListener('error', onLoaded);
+    timer = setTimeout(onLoaded, 5000);
     video.src = source.url;
+    video.load();
   });
 }
 

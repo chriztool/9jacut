@@ -3,20 +3,22 @@
 // Rearranges the desktop workspace into a phone editor, reusing every
 // existing panel and control (so every PC editing feature is still there):
 //
-//   +---------------------------+------+
-//   | menu  name    undo redo ⤓ |      |
-//   +---------------------------+  T   |
-//   |          player           |  O   |
-//   +---------------------------+  O   |
-//   | 00:04 / 00:17   ▶   ⛶     |  L   |
-//   +---------------------------+      |
-//   |  split delete dup …       |  R   |
-//   |  timeline                 |  A   |
-//   |                           |  I   |
-//   +---------------------------+  L   |
+//   +---------------------------------+
+//   | menu  name        undo redo  ⤓  |
+//   +---------------------------------+
+//   |             player              |
+//   | 00:04 / 00:17      ▶       ⛶    |
+//   +============ handle =============+  <- drag to resize
+//   |  split delete dup …             |
+//   |  timeline                       |▏ <- swipe left from the edge:
+//   |                                 |     the tool rail slides in
+//   +---------------------------------+
 //
-// Tapping a tool on the rail opens its panel over the timeline. The panel is
-// "cut open" from the rail by a gold blade line (see mobile/mobile.css).
+// The tool rail stays out of the way until you swipe in from the right
+// edge. Tapping a tool opens its panel over the timeline, "cut open" from
+// the rail by a gold blade line (see mobile/mobile.css), and the rail
+// slides away again. The handle under the player (and the panel's grip)
+// resize the video against the editing area; sizes are remembered.
 //
 // Runs only on phones (or with ?phone=1 for testing); iPads keep the full
 // desktop workspace.
@@ -77,6 +79,51 @@
   indicator.setAttribute('aria-hidden', 'true');
   rail.appendChild(indicator);
   workspace.appendChild(rail);
+
+  // The rail is hidden until you swipe in from the right edge. A thin
+  // sliver at the edge shows where it is (and can be tapped too).
+  const edgeTab = document.createElement('button');
+  edgeTab.className = 'rail-edge-tab';
+  edgeTab.id = 'railEdgeTab';
+  edgeTab.type = 'button';
+  edgeTab.setAttribute('aria-label', 'Show editing tools');
+  workspace.appendChild(edgeTab);
+
+  let railOpen = false;
+  function setRail(open) {
+    railOpen = !!open;
+    html.classList.toggle('rail-open', railOpen);
+    rail.setAttribute('aria-hidden', railOpen ? 'false' : 'true');
+    if (railOpen) requestAnimationFrame(() => markOpen());
+  }
+  const openRail = () => setRail(true);
+  const closeRail = () => setRail(false);
+  setRail(false);
+  edgeTab.addEventListener('click', openRail);
+
+  // Swipe left starting near the right edge -> rail in. Swipe right on the
+  // rail -> rail out. Taps anywhere else close it.
+  const EDGE = 28;
+  let swipe = null;
+  document.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    if (e.touches.length !== 1) { swipe = null; return; }
+    const fromEdge = t.clientX >= window.innerWidth - EDGE;
+    const onRail = railOpen && rail.contains(e.target);
+    swipe = (fromEdge && !railOpen) || onRail ? { x: t.clientX, y: t.clientY, onRail } : null;
+  }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    if (!swipe) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - swipe.x;
+    const dy = Math.abs(t.clientY - swipe.y);
+    if (!swipe.onRail && dx < -30 && dy < 80) openRail();
+    if (swipe.onRail && dx > 40 && dy < 80) closeRail();
+    swipe = null;
+  }, { passive: true });
+  document.addEventListener('pointerdown', (e) => {
+    if (railOpen && !rail.contains(e.target) && e.target !== edgeTab) closeRail();
+  }, true);
 
   // ---------- The sheet that tool panels open in ----------
   const sheet = document.createElement('section');
@@ -180,28 +227,100 @@
     if (!b) return;
     if (openKey === b.dataset.tab) closeSheet();
     else openSheet(b.dataset.tab);
+    setTimeout(closeRail, 180); // let the blade start from the rail first
   });
   editBtn.addEventListener('click', () => {
     if (openKey === 'details') closeSheet();
     else openSheet('details');
+    setTimeout(closeRail, 180);
   });
   sheet.querySelector('.sheet-close').addEventListener('click', closeSheet);
 
-  // Swipe the grip down to close.
-  const grip = sheet.querySelector('.sheet-grip');
-  let gripY = null;
-  grip.addEventListener('touchstart', (e) => { gripY = e.touches[0].clientY; }, { passive: true });
-  grip.addEventListener('touchmove', (e) => {
-    if (gripY === null) return;
-    const dy = Math.max(0, e.touches[0].clientY - gripY);
-    sheet.style.translate = `0 ${dy}px`;
-  }, { passive: true });
-  grip.addEventListener('touchend', (e) => {
-    const dy = gripY === null ? 0 : e.changedTouches[0].clientY - gripY;
-    gripY = null;
-    sheet.style.translate = '';
-    if (dy > 70) closeSheet();
+  // ---------- Resizing: video against the editing area ----------
+  // The handle under the player and the panel's grip both move the same
+  // boundary. Portrait: the video's height. Landscape: the video's width.
+  const stage = $('videoStage');
+  const handle = document.createElement('div');
+  handle.className = 'phone-splitter';
+  handle.id = 'phoneSplitter';
+  handle.setAttribute('role', 'separator');
+  handle.setAttribute('aria-label', 'Drag to resize the video and the editing area');
+  handle.innerHTML = '<span class="splitter-bar"></span>';
+  playerPanel.appendChild(handle);
+
+  const SIZE_KEY = '9jacut.phone.size';
+  const landscape = () => window.matchMedia('(orientation: landscape)').matches;
+  let sizes = {};
+  try { sizes = JSON.parse(localStorage.getItem(SIZE_KEY) || '{}') || {}; } catch (e) { sizes = {}; }
+  const saveSizes = () => { try { localStorage.setItem(SIZE_KEY, JSON.stringify(sizes)); } catch (e) { /* private mode */ } };
+
+  function limits() {
+    if (landscape()) return { min: 200, max: Math.max(220, workspace.clientWidth - 240) };
+    return { min: 110, max: Math.max(130, workspace.clientHeight - 230) };
+  }
+  function applySize() {
+    const { min, max } = limits();
+    if (landscape()) {
+      const w = sizes.landscape ? Math.round(Math.min(max, Math.max(min, sizes.landscape))) : null;
+      workspace.style.setProperty('--player-w', w ? `${w}px` : '');
+      stage.style.removeProperty('--player-h');
+      workspace.style.removeProperty('--player-h');
+    } else {
+      const h = sizes.portrait ? Math.round(Math.min(max, Math.max(min, sizes.portrait))) : null;
+      if (h) workspace.style.setProperty('--player-h', `${h}px`); else workspace.style.removeProperty('--player-h');
+      workspace.style.removeProperty('--player-w');
+    }
+    placeSheet();
+  }
+  function currentSize() {
+    return landscape() ? playerPanel.getBoundingClientRect().width : stage.getBoundingClientRect().height;
+  }
+  function startResize(e, { closeIfTiny = false } = {}) {
+    const start = { x: e.clientX, y: e.clientY, size: currentSize(), key: landscape() ? 'landscape' : 'portrait' };
+    const before = sizes[start.key];
+    handle.classList.add('dragging');
+    const move = (ev) => {
+      const delta = start.key === 'landscape' ? ev.clientX - start.x : ev.clientY - start.y;
+      const { min, max } = limits();
+      sizes[start.key] = Math.min(max + 60, Math.max(min, start.size + delta));
+      applySize();
+    };
+    const up = (ev) => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      handle.classList.remove('dragging');
+      const { max } = limits();
+      // Pulling the panel's grip far down closes it (and keeps the old size).
+      if (closeIfTiny && openKey && start.key === 'portrait' && sizes.portrait > max + 30) {
+        sizes.portrait = before;
+        applySize();
+        closeSheet();
+        return;
+      }
+      sizes[start.key] = Math.min(max, sizes[start.key]);
+      applySize();
+      saveSizes();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  }
+  handle.addEventListener('pointerdown', (e) => { e.preventDefault(); startResize(e); });
+  // Double-tap the handle: back to the standard sizes.
+  let lastTap = 0;
+  handle.addEventListener('pointerup', () => {
+    const now = Date.now();
+    if (now - lastTap < 320) { sizes = {}; saveSizes(); applySize(); }
+    lastTap = now;
   });
+  const grip = sheet.querySelector('.sheet-grip');
+  grip.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.sheet-close')) return;
+    e.preventDefault();
+    startResize(e, { closeIfTiny: true });
+  });
+  applySize();
 
   // ---------- Timeline: pinch to zoom ----------
   const tlScroll = $('tlScroll');
@@ -286,7 +405,7 @@
   }
 
   // ---------- Keep things in place ----------
-  const relayout = () => { placeSheet(); markOpen(); };
+  const relayout = () => { applySize(); markOpen(); };
   window.addEventListener('resize', relayout);
   window.addEventListener('orientationchange', () => setTimeout(relayout, 250));
   new ResizeObserver(relayout).observe(playerPanel);
@@ -298,5 +417,9 @@
   });
 
   // For tests and for the native layer later.
-  window.nineJaCutPhone = { openSheet, closeSheet, get openKey() { return openKey; } };
+  window.nineJaCutPhone = {
+    openSheet, closeSheet, openRail, closeRail,
+    get openKey() { return openKey; },
+    get railOpen() { return railOpen; },
+  };
 })();

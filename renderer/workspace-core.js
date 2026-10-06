@@ -229,6 +229,18 @@ async function seekToClip(clip, local = 0) {
   await seekTimeline(entry.start + Math.max(0, Math.min(local, entry.dur - 0.01)));
 }
 
+// After a jump (e.g. back to the start to replay), Safari/iPhone keeps
+// video.ended true until the jump finishes, which made playback stop
+// immediately the second time. Wait for the jump before playing.
+function waitForSeek(timeoutMs = 1500) {
+  if (!video.seeking) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => { clearTimeout(timer); video.removeEventListener('seeked', done); resolve(); };
+    const timer = setTimeout(done, timeoutMs);
+    video.addEventListener('seeked', done);
+  });
+}
+
 function timelineTick() {
   if (!ws.playing) return;
   if (!ws.advancing) {
@@ -236,12 +248,13 @@ function timelineTick() {
     const entry = entryForClip(state.previewClipId, entries);
     if (!entry) { pauseTimeline(); return; }
     const clip = entry.clip;
-    const reachedEnd = video.ended || video.currentTime >= clip.end - 1 / 60;
+    // While a jump is in progress, ended/currentTime still describe the old spot.
+    const reachedEnd = !video.seeking && (video.ended || video.currentTime >= clip.end - 1 / 60);
     if (reachedEnd) {
       const next = entries[entry.index + 1];
       if (next) {
         ws.advancing = true;
-        seekTimeline(next.start).then(() => {
+        seekTimeline(next.start).then(waitForSeek).then(() => {
           ws.advancing = false;
           if (ws.playing) video.play().catch(() => {});
         });
@@ -267,6 +280,7 @@ async function playTimeline() {
   const total = timelineDuration();
   if (ws.time >= total - 0.05) await seekTimeline(0);
   else await seekTimeline(ws.time);
+  await waitForSeek();
   ws.playing = true;
   syncPreviewAudio(entryForClip(state.previewClipId), ws.time - (entryForClip(state.previewClipId) || { start: 0 }).start);
   video.play().catch(() => {});
@@ -283,7 +297,11 @@ function pauseTimeline() {
 function togglePlay() {
   if (state.recording) return;
   if (ws.mode === 'source') {
-    if (video.paused) video.play().catch(() => {}); else video.pause();
+    if (video.paused) {
+      // Replaying a finished preview: go back to the start first.
+      if (video.ended || (video.duration && video.currentTime >= video.duration - 0.05)) video.currentTime = 0;
+      waitForSeek().then(() => video.play().catch(() => {}));
+    } else video.pause();
     return;
   }
   if (ws.playing) pauseTimeline(); else playTimeline();

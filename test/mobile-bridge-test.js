@@ -97,11 +97,25 @@ async function runPhone(indexPath, videoB64) {
   const tools = await js('[...document.querySelectorAll("#phoneRail button")].map(b => b.dataset.tab || b.dataset.phone)');
   const expected = ['details', 'media', 'audio', 'text', 'stickers', 'effects', 'transitions', 'captions', 'filters', 'adjust', 'templates'];
   check('phone: rail has Edit + all 10 PC tools', JSON.stringify(tools) === JSON.stringify(expected), tools.join(','));
-  const railBox = await js('(() => { const r = document.getElementById("phoneRail").getBoundingClientRect(); return { x: r.x, w: r.width, h: r.height }; })()');
-  check('phone: rail sits on the right side', railBox.x > 300 && railBox.w < 80, JSON.stringify(railBox));
+  const railBox = () => js('(() => { const r = document.getElementById("phoneRail").getBoundingClientRect(); return { x: Math.round(r.x), w: Math.round(r.width) }; })()');
+  check('phone: rail is hidden until you swipe for it', !(await js('window.nineJaCutPhone.railOpen')) && (await railBox()).x >= 392, JSON.stringify(await railBox()));
+  check('phone: video and timeline use the full width', await js('document.querySelector(".timeline-panel").getBoundingClientRect().width >= window.innerWidth - 1'));
+  // Swipe left from the right edge, the way a finger would.
+  const swipeLeft = `(() => {
+    const t = (x) => new Touch({ identifier: 1, target: document.body, clientX: x, clientY: 600 });
+    document.body.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, touches: [t(388)], changedTouches: [t(388)] }));
+    document.body.dispatchEvent(new TouchEvent('touchend', { bubbles: true, touches: [], changedTouches: [t(300)] }));
+  })()`;
+  await js(swipeLeft);
+  await sleep(400);
+  check('phone: swiping in from the right edge shows the rail', await js('window.nineJaCutPhone.railOpen') && (await railBox()).x > 300 && (await railBox()).x < 340, JSON.stringify(await railBox()));
   check('phone: no sideways scrolling', await js('document.documentElement.scrollWidth <= window.innerWidth + 1'));
   check('phone: Media opens on first launch', await js('window.nineJaCutPhone.openKey === "media" && !document.getElementById("phoneSheet").hidden'));
-  await shoot(win, outDir, 'phone-1-first-launch.png');
+  await shoot(win, outDir, 'phone-1-rail-swiped-in.png');
+  await js('document.getElementById("videoStage").dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))');
+  await sleep(400);
+  check('phone: tapping elsewhere hides the rail', !(await js('window.nineJaCutPhone.railOpen')));
+  await shoot(win, outDir, 'phone-1b-first-launch.png');
 
   await importTestVideo(js, videoB64);
   let clips = 0;
@@ -130,6 +144,8 @@ async function runPhone(indexPath, videoB64) {
     if (ok) opened.push(key);
   }
   check('phone: every rail tool opens its panel', opened.length === expected.length, `opened ${opened.length}/${expected.length}`);
+  await sleep(300);
+  check('phone: the rail slides away after picking a tool', !(await js('window.nineJaCutPhone.railOpen')));
   await js(`document.querySelector('#phoneRail [data-tab="text"]').click()`);
   await sleep(600);
   await shoot(win, outDir, 'phone-3-text-tool.png');
@@ -142,6 +158,41 @@ async function runPhone(indexPath, videoB64) {
   await js(`document.querySelector('#phoneRail [data-phone="details"]').click()`);
   await sleep(500);
   check('phone: tapping the open tool closes it', await js('document.getElementById("phoneSheet").hidden'));
+
+  // Drag the handle under the player: the video gets bigger, the editing area smaller.
+  const stageH = () => js('Math.round(document.getElementById("videoStage").getBoundingClientRect().height)');
+  const h0 = await stageH();
+  const drag = (dy) => js(`(() => {
+    const h = document.getElementById('phoneSplitter'); const r = h.getBoundingClientRect();
+    const y = r.top + r.height / 2;
+    h.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 200, clientY: y }));
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 200, clientY: y + ${dy} }));
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 200, clientY: y + ${dy} }));
+  })()`);
+  await drag(120);
+  await sleep(250);
+  const h1 = await stageH();
+  check('phone: dragging the handle down makes the video bigger', h1 - h0 > 100, `${h0}px -> ${h1}px`);
+  await shoot(win, outDir, 'phone-4b-bigger-video.png');
+  await drag(-200);
+  await sleep(250);
+  const h2 = await stageH();
+  check('phone: dragging it up gives the editing area more room', h2 < h0 && h2 >= 110, `${h1}px -> ${h2}px`);
+  check('phone: the size is remembered', await js(`JSON.parse(localStorage.getItem('9jacut.phone.size')).portrait === ${h2}`) || await js(`Math.abs(JSON.parse(localStorage.getItem('9jacut.phone.size')).portrait - ${h2}) < 2`));
+  await js(`document.getElementById('phoneSplitter').dispatchEvent(new PointerEvent('pointerup', { bubbles: true })); document.getElementById('phoneSplitter').dispatchEvent(new PointerEvent('pointerup', { bubbles: true }))`);
+  await sleep(250);
+  check('phone: double-tapping the handle resets the sizes', Math.abs((await stageH()) - h0) <= 2, `${await stageH()}px vs ${h0}px`);
+  // Pulling an open panel's grip far down closes it.
+  await js(`document.querySelector('#phoneRail [data-tab="text"]').click()`);
+  await sleep(500);
+  await js(`(() => {
+    const g = document.querySelector('.sheet-grip'); const r = g.getBoundingClientRect(); const y = r.top + 10;
+    g.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 100, clientY: y }));
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 100, clientY: y + 500 }));
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 100, clientY: y + 500 }));
+  })()`);
+  await sleep(600);
+  check('phone: pulling the panel grip down closes the panel', await js('document.getElementById("phoneSheet").hidden') && Math.abs((await stageH()) - h0) <= 2);
 
   // Promo and About are reachable from the menu.
   await js('document.getElementById("btnMenu").click()');
@@ -158,6 +209,16 @@ async function runPhone(indexPath, videoB64) {
   win.setContentSize(852, 393);
   await sleep(700);
   check('phone: landscape fits the screen', await js('document.documentElement.scrollWidth <= window.innerWidth + 1'));
+  const w0 = await js('Math.round(document.querySelector(".player-panel").getBoundingClientRect().width)');
+  await js(`(() => {
+    const h = document.getElementById('phoneSplitter'); const r = h.getBoundingClientRect(); const x = r.left + r.width / 2;
+    h.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x, clientY: 200 }));
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: x - 120, clientY: 200 }));
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: x - 120, clientY: 200 }));
+  })()`);
+  await sleep(250);
+  const w1 = await js('Math.round(document.querySelector(".player-panel").getBoundingClientRect().width)');
+  check('phone: landscape handle resizes video against timeline', w0 - w1 > 100, `${w0}px -> ${w1}px`);
   await shoot(win, outDir, 'phone-7-landscape.png');
 
   check('phone: no errors in the page console', pageErrors.length === 0, pageErrors.slice(0, 3).join(' | '));
