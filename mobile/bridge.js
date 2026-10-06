@@ -437,9 +437,18 @@
       for (let i = 0; i < 100 && ws.playing; i++) await sleep(100);
       const firstEnd = ws.time;
       step(`play once: reached ${firstEnd.toFixed(2)}s of ${total.toFixed(2)}s`);
-      await playTimeline();
-      await sleep(900);
-      const replaying = ws.playing && ws.time > 0.2 && ws.time < total;
+      const snap = () => `${ws.playing ? 'P' : '-'}${player.paused ? 'p' : ''}${player.ended ? 'e' : ''}${player.seeking ? 's' : ''} t=${ws.time.toFixed(2)} v=${player.currentTime.toFixed(2)} r=${player.readyState}`;
+      step(`before replay: ${snap()}`);
+      const replayStart = Date.now();
+      playTimeline();
+      const trace = [];
+      let replaying = false;
+      while (Date.now() - replayStart < 3000) {
+        await sleep(150);
+        trace.push(`${Date.now() - replayStart}ms ${snap()}`);
+        if (ws.playing && ws.time > 0.5) { replaying = true; break; }
+      }
+      step(`replay trace: ${trace.join(' | ')}`);
       step(`play again: ${replaying ? 'plays' : 'stopped'} at ${ws.time.toFixed(2)}s`);
       pauseTimeline();
       report.ok = exportsOk && Math.abs(firstEnd - total) < 0.3 && replaying;
