@@ -415,8 +415,16 @@
     }
     console.log(`9JACUT_SELFTEST ${report.ok ? 'PASS' : 'FAIL'} ${JSON.stringify(report.steps)}`);
   }
-  if (nativeKit && engine) {
-    nativePaths().then((p) => { if (p.selfTest) setTimeout(() => runSelfTest(p), 1500); }).catch(() => {});
+  if (isNative) {
+    if (!nativeKit || !engine) {
+      console.error(`9JACUT_NATIVE missing: plugin=${!!nativeKit} engine=${!!engine} plugins=${Object.keys(plugins).join(',')}`);
+    } else {
+      nativePaths().then((p) => {
+        if (!p.selfTest) return;
+        console.log('9JACUT_SELFTEST_START');
+        setTimeout(() => runSelfTest(p), 1500);
+      }).catch((e) => console.error(`9JACUT_NATIVE getPaths failed: ${e && e.message}`));
+    }
   }
 
   document.documentElement.classList.add('is-phone-app', `platform-${platform}`);

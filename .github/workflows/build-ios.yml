@@ -81,7 +81,7 @@ jobs:
           if ! grep -q '9JACUT_SELFTEST PASS' selftest-log.txt; then
             # Put the end of the app's output in a build note (readable without the full log).
             LINES=$(wc -l < selftest-log.txt | tr -d ' ')
-            TAIL=$( (grep -E '9JACUT|⚡️|ERROR|rror' selftest-log.txt || tail -25 selftest-log.txt) | tail -25 | cut -c1-300 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            TAIL=$(tail -30 selftest-log.txt | cut -c1-240 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
             echo "::error title=Export self-test did not pass (${LINES} log lines)::${TAIL}"
             exit 1
           fi
