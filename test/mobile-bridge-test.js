@@ -95,8 +95,9 @@ async function runPhone(indexPath, videoB64) {
 
   check('phone: phone layout switched on', await js('document.documentElement.classList.contains("phone-layout")'));
   const tools = await js('[...document.querySelectorAll("#phoneRail button")].map(b => b.dataset.tab || b.dataset.phone)');
-  const expected = ['details', 'media', 'audio', 'text', 'stickers', 'effects', 'transitions', 'captions', 'filters', 'adjust', 'templates'];
-  check('phone: rail has Edit + all 10 PC tools', JSON.stringify(tools) === JSON.stringify(expected), tools.join(','));
+  // Auto-captions are hidden on iPhone until they run on the phone.
+  const expected = ['details', 'media', 'audio', 'text', 'stickers', 'effects', 'transitions', 'filters', 'adjust', 'templates'];
+  check('phone: rail has Edit + every PC tool that works on iPhone', JSON.stringify(tools) === JSON.stringify(expected), tools.join(','));
   const railBox = () => js('(() => { const r = document.getElementById("phoneRail").getBoundingClientRect(); return { x: Math.round(r.x), w: Math.round(r.width) }; })()');
   check('phone: rail is hidden until you swipe for it', !(await js('window.nineJaCutPhone.railOpen')) && (await railBox()).x >= 392, JSON.stringify(await railBox()));
   check('phone: video and timeline use the full width', await js('document.querySelector(".timeline-panel").getBoundingClientRect().width >= window.innerWidth - 1'));
@@ -153,6 +154,11 @@ async function runPhone(indexPath, videoB64) {
   await sleep(600);
   check('phone: Edit shows the selected clip details', await js('/Details · phone-test/.test(document.getElementById("propsTitle").textContent)'));
   await shoot(win, outDir, 'phone-4-edit-clip.png');
+  check('phone: no auto-caption controls (not on iPhone yet)', await js(`![...document.querySelectorAll('#propsTabs button')].some((b) => /Captions/.test(b.textContent)) && !document.querySelector('#phoneRail [data-tab="captions"]')`));
+  check('phone: About page has phone wording', await js(`(() => {
+    const t = document.getElementById('aboutView').textContent;
+    return !/Keyboard shortcuts/.test(t) && !/Auto-captions/.test(t) && /never leave your phone/.test(t) && !/your computer/.test(t);
+  })()`));
 
   // Tapping the open tool again closes it.
   await js(`document.querySelector('#phoneRail [data-phone="details"]').click()`);

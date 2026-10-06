@@ -381,6 +381,66 @@
     new MutationObserver(() => phoneWords(box)).observe(box, { childList: true, subtree: true, characterData: true });
   }
 
+  // ---------- Auto-captions are not on iPhone yet: hide them ----------
+  // (A control that only says "not available" is an App Review rejection.)
+  if (!window.nineJaCut.captionsAvailable) {
+    html.classList.add('no-auto-captions');
+    const capTab = toolTabs.querySelector('button[data-tab="captions"]');
+    if (capTab) capTab.remove();
+    const i = PROPS_TABS.findIndex(([key]) => key === 'captions');
+    if (i >= 0) PROPS_TABS.splice(i, 1);
+    if (ws.propsTab === 'captions') ws.propsTab = 'video';
+    const dropCaptionRows = (root) => {
+      for (const row of root.querySelectorAll('.detail-row')) {
+        const label = row.querySelector('.detail-label');
+        if (label && label.textContent === 'Captions') row.remove();
+      }
+    };
+    const props = $('propsBody');
+    dropCaptionRows(props);
+    new MutationObserver(() => dropCaptionRows(props)).observe(props, { childList: true, subtree: true });
+    if (typeof renderProperties === 'function') renderProperties();
+  }
+
+  // ---------- About page: phone wording ----------
+  (function phoneAbout() {
+    const page = document.querySelector('#aboutView .about-page');
+    if (!page) return;
+    const sectionTitled = (title) => [...page.querySelectorAll('section')].find((s) => {
+      const h = s.querySelector('h2');
+      return h && h.textContent.trim() === title;
+    });
+    const what = sectionTitled('What 9jaCut does');
+    if (what) {
+      const ps = what.querySelectorAll('p');
+      if (ps[1]) ps[1].innerHTML = 'Everything is <strong>free</strong>: no watermark, no subscription, no account, and no feature you start using suddenly gets locked behind a paywall. Your videos never leave your phone.';
+    }
+    for (const card of page.querySelectorAll('.about-card')) {
+      const h = card.querySelector('h3');
+      if (!h) continue;
+      if (/Auto-captions/.test(h.textContent) && !window.nineJaCut.captionsAvailable) card.remove();
+      if (/Projects/.test(h.textContent)) card.querySelector('p').textContent = 'Save and reopen projects, undo any change, and export from 720p up to 4K straight to your Photos.';
+      if (/Sound/.test(h.textContent)) card.querySelector('p').textContent = 'Add your own music (it can loop to fill the clip), record a voiceover with your phone’s microphone, adjust volumes and reduce background noise.';
+    }
+    const steps = sectionTitled('How to make a video');
+    if (steps) {
+      steps.querySelector('ol').innerHTML = [
+        'Tap <strong>Media</strong>, then <strong>Import videos</strong> and pick from your Photos or Files. Your first videos go straight onto the timeline.',
+        'Trim: tap a clip, then drag its edges. Cut: move the playhead and tap the scissors, then delete the part you don\'t want. Drag clips to change their order.',
+        'Pinch the timeline to zoom in and out.',
+        'Swipe in from the right edge of the screen for the tools — Media, Audio, Text, Stickers, Effects, Transitions, Filters, Adjust and Templates.',
+        'Tap <strong>Edit</strong> to see and change every setting of the selected clip. Drag the bar between the player and the tools to make either bigger.',
+        'Tap play to watch the whole video, then tap <strong>Export</strong>. Your video is saved to Photos.',
+      ].map((t) => `<li>${t}</li>`).join('');
+    }
+    const keys = sectionTitled('Keyboard shortcuts');
+    if (keys) keys.remove();
+    const privacy = sectionTitled('Your privacy');
+    if (privacy) privacy.querySelector('p').textContent = '9jaCut works entirely on your phone. Your videos, photos, recordings and projects are never uploaded anywhere, and the app collects no data about you. It only reads the photos and videos you pick, and saves your exports to Photos.';
+    const credits = sectionTitled('Credits');
+    if (credits) credits.querySelector('p').textContent = '9jaCut for iPhone is built with Capacitor and FFmpeg (LGPL). Text uses the Poppins font (SIL Open Font Licence).';
+  })();
+
   // ---------- Export saves to Photos: no folder to choose on a phone ----------
   const PHOTOS = 'Photos';
   state.exportFolder = PHOTOS;

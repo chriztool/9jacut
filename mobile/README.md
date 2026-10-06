@@ -88,3 +88,14 @@ Building the iPhone app itself needs a Mac — GitHub's are used: push to the
 `ios` branch and open the **Actions** tab → **Build iOS app**. The run's
 download includes `ios-simulator.png`, a screenshot of 9jaCut running on a
 simulated iPhone.
+
+## App Store
+
+- Icon: `mobile/branding/make-icon.py` redraws the desktop icon as the
+  1024 px App Store icon; `make-splash.py` makes the launch screen.
+- Screenshots: `mobile/branding/screenshots.js` (raw app screens at iPhone
+  6.9" size) then `frame-screenshots.py` (headline + background). Finished
+  ones are in `mobile/appstore/`, with the listing text in `listing.md`.
+- Privacy policy: `PRIVACY.md` at the top of the repo.
+- iPhone only for now (`TARGETED_DEVICE_FAMILY = 1`). Auto-captions are
+  hidden on iPhone until they run on the phone.

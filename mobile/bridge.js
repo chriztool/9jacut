@@ -351,6 +351,7 @@
     },
     onPromoExportProgress: (cb) => subscribe('promo', cb),
 
+    captionsAvailable: false, // the phone layout hides auto-captions until they work on iPhone
     getCaptionsInfo: async () => { throw new Error(CAPTIONS_NOT_READY); }, // interface keeps its defaults
     generateCaptions: async ({ clipId }) => {
       emit('captions', { clipId, stage: 'error', message: CAPTIONS_NOT_READY });
