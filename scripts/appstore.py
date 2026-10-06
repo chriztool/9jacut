@@ -27,7 +27,11 @@ API = 'https://api.appstoreconnect.apple.com'
 problems = []
 
 
+log = []
+
+
 def note(msg):
+    log.append(msg)
     print(f'::notice::{msg}', flush=True)
 
 
@@ -146,7 +150,7 @@ def app_info_localization():
 # gambling or mature content -> 4+.
 AGE_BOOL = {'gambling', 'unrestrictedWebAccess', 'lootBox', 'messagingAndChat', 'parentalControls', 'ageAssurance',
             'userGeneratedContent', 'advertising', 'healthOrWellnessTopics', 'seventeenPlus', 'gamblingAndContests'}
-AGE_SKIP = {'kidsAgeBand', 'ageRatingOverride', 'ageRatingOverrideV2', 'koreaAgeRatingOverride', 'developerAgeRatingInfoUrl'}
+AGE_SKIP = {'gracRatingClassificationNumber', 'kidsAgeBand', 'ageRatingOverride', 'ageRatingOverrideV2', 'koreaAgeRatingOverride', 'developerAgeRatingInfoUrl'}
 
 
 def age_rating():
@@ -166,7 +170,7 @@ def age_rating():
         call('PATCH', f'/v1/ageRatingDeclarations/{did}', body(todo))
         return
     except ApiError as e:
-        print(f'age rating all-at-once failed ({e}); trying one by one', flush=True)
+        warn(f'age rating all at once: {e}')
     failed = []
     for k, v in todo.items():
         for val in (['NONE', False] if v == 'NONE' else [False, 'NONE']):
@@ -178,7 +182,7 @@ def age_rating():
         else:
             failed.append(k)
     if failed:
-        raise ApiError('could not set: ' + ', '.join(failed))
+        raise ApiError('could not set: ' + ', '.join(failed) + ' | current: ' + json.dumps({k: attrs.get(k) for k in failed})[:400])
 
 
 def content_rights():
@@ -350,11 +354,19 @@ if 'versionLoc' in state:
     step('screenshots', screenshots)
 step('App Review contact and notes', review_details)
 step('attach the newest build', lambda: attach_build(SUBMIT))
+
+
+def finish(code):
+    parts = log + (['PROBLEMS: ' + ' || '.join(problems)] if problems else [])
+    summary = ' || '.join(parts)
+    print(f'::error title=Summary::{summary[:3800]}' if code else f'::notice title=Summary::{summary[:3800]}', flush=True)
+    sys.exit(code)
+
+
 if SUBMIT:
     if problems:
         print('::error::Not submitted: fix the warnings above first.')
-        sys.exit(1)
+        finish(1)
     if not step('submit for App Review', submit):
-        sys.exit(1)
-print(f'::notice::Done with {len(problems)} problem(s).')
-sys.exit(1 if problems else 0)
+        finish(1)
+finish(1 if problems else 0)
