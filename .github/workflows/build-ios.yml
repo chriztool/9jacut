@@ -5,8 +5,8 @@
 # plugin, and saves a screenshot. FFmpeg comes from the ffmpeg-ios-lgpl-*
 # release made by build-ffmpeg-ios.yml.
 #
-# Once the Apple Developer account is ready, a signed build + TestFlight
-# upload gets added here so the app can go on a real iPhone.
+# The testflight job then signs the app and uploads it to TestFlight so it
+# can be installed on a real iPhone.
 #
 # Runs on every push to the `ios` branch, and from the Actions tab.
 name: Build iOS app
