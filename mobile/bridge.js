@@ -400,20 +400,26 @@
       if (gen.returnCode !== 0) throw new Error('could not make the test video');
       const info = await limit(engine.probeMedia(src), 'reading the test video');
       step(`probe: ${info.width}x${info.height} ${info.duration}s audio=${info.hasAudio}`);
-      const results = await limit(engine.exportClips({
-        clips: [{
-          id: 'selftest', name: 'selftest', sourcePath: src, start: 0.5, end: 2.5,
-          look: { preset: 'gold' },
-          texts: [{ text: "Self-test: 9ja's text", position: 'bottom', size: 7, style: 'box' }],
-          stickers: [{ key: 'fire', x: 100, y: 100, size: 120, start: 0, end: 2 }],
-        }],
-        settings: { resolution: '720', quality: 'standard' },
-      }, paths, (d) => { if (d.status === 'error') step(`export error: ${d.message}`); }), 'exporting', 180000);
-      const r = results[0];
-      step(`export: ${r.ok ? 'ok' : r.error}`);
-      if (!r.ok) throw new Error(r.error);
-      const out = await limit(engine.probeMedia(r.outPath), 'reading the exported video');
-      step(`result: ${out.width}x${out.height} ${out.duration}s audio=${out.hasAudio}`);
+      // One feature at a time, so a failure points at its cause.
+      const variants = [
+        ['plain', {}],
+        ['look', { look: { preset: 'gold' } }],
+        ['text', { texts: [{ text: "Self-test: 9ja's text", position: 'bottom', size: 7, style: 'box' }] }],
+        ['sticker', { stickers: [{ key: 'fire', x: 100, y: 100, size: 120, start: 0, end: 2 }] }],
+      ];
+      let out = null;
+      for (const [name, extra] of variants) {
+        selfTestSay(`9JACUT_STEP export ${name}: starting`);
+        const results = await limit(engine.exportClips({
+          clips: [{ id: `selftest-${name}`, name: `selftest-${name}`, sourcePath: src, start: 0.5, end: 2.5, ...extra }],
+          settings: { resolution: '720', quality: 'standard' },
+        }, paths, () => {}), `exporting (${name})`, 120000);
+        const r = results[0];
+        step(`export ${name}: ${r.ok ? 'ok' : r.error}`);
+        if (!r.ok) throw new Error(r.error);
+        out = await limit(engine.probeMedia(r.outPath), 'reading the exported video');
+        step(`result ${name}: ${out.width}x${out.height} ${out.duration}s audio=${out.hasAudio}`);
+      }
       report.ok = out.width === 1280 && out.height === 720 && Math.abs(out.duration - 2) < 0.3 && out.hasAudio;
     } catch (e) {
       step(`error: ${e && e.message}`);

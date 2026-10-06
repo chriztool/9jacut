@@ -83,7 +83,25 @@ jobs:
           cp "$RESULT" selftest-result.txt 2>/dev/null || echo "(no result file)" > selftest-result.txt
           cat selftest-result.txt
           if ! grep -q '9JACUT_SELFTEST PASS' selftest-result.txt; then
-            NOTE=$( (cat selftest-result.txt; echo '--- app output ---'; grep -vE 'DiskCookieStorage' selftest-log.txt | tail -40) | cut -c1-240 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            # If the app crashed, the simulator leaves a crash report on the Mac.
+            CRASH=$(ls -t ~/Library/Logs/DiagnosticReports/App*.ips 2>/dev/null | head -1)
+            if [ -n "$CRASH" ]; then
+              cp "$CRASH" crash-report.ips
+              python3 - "$CRASH" > crash-summary.txt <<'PY' || true
+          import json, sys
+          raw = open(sys.argv[1]).read().split('\n', 1)
+          body = json.loads(raw[1])
+          exc = body.get('exception', {})
+          print('CRASH', exc.get('type'), exc.get('signal'), body.get('termination', {}).get('indicator', ''))
+          images = body.get('usedImages', [])
+          for th in body.get('threads', []):
+              if th.get('triggered'):
+                  for fr in th.get('frames', [])[:14]:
+                      img = images[fr['imageIndex']].get('name', '?') if fr.get('imageIndex', -1) < len(images) else '?'
+                      print(' ', img, fr.get('symbol', hex(fr.get('imageOffset', 0))))
+          PY
+            fi
+            NOTE=$( (cat selftest-result.txt; cat crash-summary.txt 2>/dev/null; echo '--- app output ---'; grep -vE 'DiskCookieStorage' selftest-log.txt | tail -25) | cut -c1-200 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
             echo "::error title=Export self-test did not pass::${NOTE}"
             exit 1
           fi
@@ -114,6 +132,7 @@ jobs:
             ios-app-log.txt
             selftest-log.txt
             selftest-result.txt
+            crash-report.ips
             9jaCut-simulator.zip
           if-no-files-found: ignore
           retention-days: 14
