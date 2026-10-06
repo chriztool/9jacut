@@ -149,7 +149,8 @@ def app_info_localization():
 # Everything "none / no": a video editor with no web browsing, chat, ads,
 # gambling or mature content -> 4+.
 AGE_BOOL = {'gambling', 'unrestrictedWebAccess', 'lootBox', 'messagingAndChat', 'parentalControls', 'ageAssurance',
-            'userGeneratedContent', 'advertising', 'healthOrWellnessTopics', 'seventeenPlus', 'gamblingAndContests'}
+            'userGeneratedContent', 'advertising', 'healthOrWellnessTopics', 'seventeenPlus', 'gamblingAndContests',
+            'socialMedia', 'socialMediaAgeRestricted'}
 AGE_SKIP = {'gracRatingClassificationNumber', 'kidsAgeBand', 'ageRatingOverride', 'ageRatingOverrideV2', 'koreaAgeRatingOverride', 'developerAgeRatingInfoUrl'}
 
 
