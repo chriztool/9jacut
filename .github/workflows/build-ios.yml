@@ -14,6 +14,11 @@ name: Build iOS app
 on:
   push:
     branches: [ios]
+    # App Store listing changes don't change the app.
+    paths-ignore:
+      - 'mobile/appstore/**'
+      - 'scripts/appstore.py'
+      - '.github/workflows/appstore.yml'
   workflow_dispatch:
 
 jobs:
