@@ -54,25 +54,23 @@ the share sheet opening afterwards.
 
 ## Getting it on your iPhone (TestFlight)
 
-The `testflight` job in `build-ios.yml` signs the app and uploads it to
-TestFlight on every push to `ios`, once these are set up (one time):
+Set up (Oct 2026): bundle ID `com.ninejacut.app` registered, the 9jaCut app
+created in App Store Connect, and the API key "9jaCut GitHub builds" (Admin)
+made. Its Key ID, the Issuer ID and the Team ID are in `mobile/ios-signing.env`.
 
-1. **App Store Connect > Apps > + > New App**: platform iOS, name 9jaCut,
-   bundle ID `com.ninejacut.app` (register it first under
-   developer.apple.com > Identifiers if it is not in the list), SKU `9jacut`.
-2. **App Store Connect > Users and Access > Integrations > App Store Connect API**:
-   create a key with the **Admin** role (it needs to create signing certificates). Download the `.p8` file (only
-   possible once) and note the **Key ID** and **Issuer ID**.
-3. **GitHub > chriztool/9jacut > Settings > Secrets and variables > Actions**,
-   add four secrets:
-   - `APPLE_TEAM_ID` — developer.apple.com > Account > Membership details > Team ID
-   - `ASC_KEY_ID` — the Key ID
-   - `ASC_ISSUER_ID` — the Issuer ID
-   - `ASC_KEY_P8` — open the `.p8` file in Notepad and paste all of it
-4. Push to `ios` (or re-run the latest **Build iOS app** run). When Apple has
-   processed the build, install **TestFlight** from the App Store on your
-   iPhone; 9jaCut appears there for you (add yourself under the app's
-   TestFlight tab > Internal testing if it doesn't).
+The `testflight` job in `build-ios.yml` signs and uploads every push to `ios`
+once the private key is a repository secret:
+
+1. App Store Connect > Users and Access > Integrations > App Store Connect API >
+   "9jaCut GitHub builds" > **Download** (Apple allows this only once; keep
+   the `AuthKey_Y6VJ5NJ3L4.p8` file somewhere safe).
+2. GitHub > chriztool/9jacut > Settings > Secrets and variables > Actions >
+   **New repository secret**: name `ASC_KEY_P8`, value = the whole text of the
+   `.p8` file (open it in Notepad, copy everything).
+3. Re-run the latest **Build iOS app** run (or push to `ios`). When Apple has
+   processed the build (10-30 minutes), it shows up in the **TestFlight** app
+   on your iPhone (you're added as an internal tester under the app's
+   TestFlight tab).
 
 ## Commands
 

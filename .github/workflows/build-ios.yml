@@ -138,35 +138,35 @@ jobs:
           retention-days: 14
 
   # Signed build uploaded to TestFlight, so it can be installed on a real
-  # iPhone with Apple's TestFlight app. Skipped until these repository
-  # secrets exist (Settings > Secrets and variables > Actions):
-  #   APPLE_TEAM_ID           your 10-character Team ID (developer.apple.com > Account > Membership)
-  #   ASC_KEY_ID              App Store Connect API key ID
-  #   ASC_ISSUER_ID           App Store Connect API issuer ID
-  #   ASC_KEY_P8              the full text of the downloaded AuthKey_XXXX.p8 file
-  # The app must also exist in App Store Connect with bundle ID com.ninejacut.app.
+  # iPhone with Apple's TestFlight app. The Team ID, API key ID and issuer ID
+  # are in mobile/ios-signing.env; the private key is the repository secret
+  # ASC_KEY_P8 (the full text of the downloaded AuthKey_XXXX.p8 file). Skipped
+  # until that secret exists.
   testflight:
     needs: simulator
     runs-on: macos-latest
     timeout-minutes: 60
     env:
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
       ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
     steps:
-      - name: Check the Apple keys are set up
+      - name: Check the Apple key is set up
         id: keys
         run: |
-          if [ -n "$APPLE_TEAM_ID" ] && [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_ISSUER_ID" ] && [ -n "$ASC_KEY_P8" ]; then
+          if [ -n "$ASC_KEY_P8" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::notice::TestFlight upload skipped: add the APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID and ASC_KEY_P8 secrets to turn it on."
+            echo "::notice::TestFlight upload skipped: add the ASC_KEY_P8 repository secret (the .p8 file's text) to turn it on."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           fi
 
       - uses: actions/checkout@v4
         if: steps.keys.outputs.ready == 'true'
+
+      - name: Read the Apple account details
+        if: steps.keys.outputs.ready == 'true'
+        run: |
+          set -a; source mobile/ios-signing.env; set +a
+          for v in APPLE_TEAM_ID ASC_KEY_ID ASC_ISSUER_ID; do echo "$v=${!v}" >> "$GITHUB_ENV"; done
 
       - uses: actions/setup-node@v4
         if: steps.keys.outputs.ready == 'true'
