@@ -97,6 +97,14 @@ function phoneVideoArgs(args) {
   return out;
 }
 
+// FFmpegKit on iOS crashes when a filter graph uses slice threads (seen on
+// the simulator: colorbalance/eq crash in avpriv_slicethread_free). Filters
+// run single-threaded on the phone; the hardware encoder does the heavy work.
+function phoneThreadArgs(args) {
+  if (state.videoEncoder !== 'videotoolbox' || args.includes('-filter_threads')) return args;
+  return ['-filter_threads', '1', '-filter_complex_threads', '1', ...args];
+}
+
 // Runs one ffmpeg command; streams its log text to onText.
 async function runFfmpeg(args, onText) {
   const native = requireNative();
@@ -105,7 +113,7 @@ async function runFfmpeg(args, onText) {
   const jobId = `job-${Date.now()}-${state.nextJob++}`;
   state.listeners.set(jobId, onText);
   try {
-    const result = await native.run({ jobId, args: phoneVideoArgs(args) });
+    const result = await native.run({ jobId, args: phoneThreadArgs(phoneVideoArgs(args)) });
     return result && typeof result.returnCode === 'number' ? result.returnCode : 1;
   } finally {
     // Late log events can still arrive; give them a moment.
@@ -113,4 +121,4 @@ async function runFfmpeg(args, onText) {
   }
 }
 
-module.exports = { state, setNative, setVideoEncoder, queueWrite, queueRemove, flush, runFfmpeg, phoneVideoArgs };
+module.exports = { state, setNative, setVideoEncoder, queueWrite, queueRemove, flush, runFfmpeg, phoneVideoArgs, phoneThreadArgs };

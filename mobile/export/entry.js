@@ -135,6 +135,7 @@ module.exports = {
   setNative: native.setNative,
   setVideoEncoder: native.setVideoEncoder,
   phoneVideoArgs: native.phoneVideoArgs,
+  phoneThreadArgs: native.phoneThreadArgs,
   exportClips,
   exportPromo,
   probeMedia,

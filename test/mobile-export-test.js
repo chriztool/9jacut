@@ -95,6 +95,10 @@ test('encoder swap: x264 settings become Apple hardware encoder settings', async
   assert.strictEqual(args[args.indexOf('-c:v') + 1], 'h264_videotoolbox');
   assert.strictEqual(args[args.length - 1], '/x/out.mp4');
   assert.ok(args.includes('-b:v'));
+  engine.setVideoEncoder('videotoolbox');
+  const threaded = engine.phoneThreadArgs(['-y', '-i', 'in.mov', 'out.mp4']);
+  engine.setVideoEncoder('libx264');
+  assert.strictEqual(threaded.slice(0, 4).join(' '), '-filter_threads 1 -filter_complex_threads 1');
 });
 
 test('one clip: text, sticker, look, speed, music, vertical reframe', async () => {
