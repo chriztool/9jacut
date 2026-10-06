@@ -208,7 +208,13 @@ jobs:
             CODE_SIGN_STYLE=Automatic \
             MARKETING_VERSION="$VERSION" \
             CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
-            "${AUTH[@]}" | tail -30
+            "${AUTH[@]}" > archive-log.txt 2>&1 || {
+              NOTE=$(grep -E 'error:|Error|No profiles|No signing|requires a provisioning|Code Signing' archive-log.txt | sort -u | head -15 | cut -c1-220 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+              echo "::error title=Signed build failed::${NOTE}"
+              tail -40 archive-log.txt
+              exit 1
+            }
+          tail -15 archive-log.txt
 
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
@@ -225,6 +231,12 @@ jobs:
             -archivePath "$RUNNER_TEMP/9jaCut.xcarchive" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
             -exportPath "$RUNNER_TEMP/export" \
-            "${AUTH[@]}" | tail -30
+            "${AUTH[@]}" > export-log.txt 2>&1 || {
+              NOTE=$(grep -E 'error:|Error|rror' export-log.txt | sort -u | head -15 | cut -c1-220 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+              echo "::error title=Upload to TestFlight failed::${NOTE}"
+              tail -40 export-log.txt
+              exit 1
+            }
+          tail -15 export-log.txt
           echo "::notice::Uploaded 9jaCut $VERSION (build ${{ github.run_number }}) to TestFlight. It shows up in the TestFlight app after Apple finishes processing (usually 10-30 minutes)."
           rm -f "$KEY_PATH"
