@@ -1,0 +1,33 @@
+name: App Store listing
+
+# Fills in the App Store listing from mobile/appstore/ through the App Store
+# Connect API, attaches the newest build, and (if "submit" is ticked) sends
+# it to App Review. Uses the same API key as the TestFlight upload.
+on:
+  workflow_dispatch:
+    inputs:
+      submit:
+        description: Submit for App Review when everything is filled in
+        type: boolean
+        default: false
+      phone:
+        description: App Review contact phone number (with country code)
+        type: string
+        default: ''
+
+jobs:
+  listing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      REVIEW_PHONE: ${{ inputs.phone }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read the Apple account details
+        run: |
+          set -a; source mobile/ios-signing.env; set +a
+          for v in APPLE_TEAM_ID ASC_KEY_ID ASC_ISSUER_ID; do echo "$v=${!v}" >> "$GITHUB_ENV"; done
+      - run: pip install pyjwt cryptography requests
+      - name: Fill in the listing${{ inputs.submit && ' and submit' || '' }}
+        run: python3 scripts/appstore.py ${{ inputs.submit && '--submit' || '' }}
