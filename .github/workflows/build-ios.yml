@@ -191,7 +191,27 @@ jobs:
         run: |
           set -eo pipefail
           KEY_PATH="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
-          printf '%s' "$ASC_KEY_P8" > "$KEY_PATH"
+          # Rebuild the key file from the secret, repairing common paste problems
+          # (missing BEGIN/END lines, Windows line endings, lost line breaks).
+          # Only the key's shape is ever printed, never its contents.
+          python3 - "$KEY_PATH" <<'PY'
+          import os, re, sys, base64
+          raw = os.environ['ASC_KEY_P8'].replace('\r', '')
+          body = re.sub(r'-----(BEGIN|END)[A-Z ]*-----', '', raw)
+          body = re.sub(r'[^A-Za-z0-9+/=]', '', body)
+          shape = f"secret: {len(raw)} chars, {raw.count(chr(10)) + 1} lines, BEGIN line: {'BEGIN PRIVATE KEY' in raw}, END line: {'END PRIVATE KEY' in raw}, key body: {len(body)} chars"
+          try:
+              der = base64.b64decode(body, validate=True)
+              ok = der[:1] == b'0' and len(der) > 100
+          except Exception:
+              ok = False
+          if not ok:
+              print(f"::error title=The ASC_KEY_P8 secret is not a valid Apple key::{shape}. Paste the whole .p8 file, from -----BEGIN PRIVATE KEY----- to -----END PRIVATE KEY-----.")
+              sys.exit(1)
+          lines = [body[i:i + 64] for i in range(0, len(body), 64)]
+          open(sys.argv[1], 'w').write('-----BEGIN PRIVATE KEY-----\n' + '\n'.join(lines) + '\n-----END PRIVATE KEY-----\n')
+          print('Key file OK (' + shape + ')')
+          PY
           VERSION=$(node -p "require('./package.json').version")
           AUTH=(-allowProvisioningUpdates
                 -authenticationKeyPath "$KEY_PATH"
