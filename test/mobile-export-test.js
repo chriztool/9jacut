@@ -95,10 +95,13 @@ test('encoder swap: x264 settings become Apple hardware encoder settings', async
   assert.strictEqual(args[args.indexOf('-c:v') + 1], 'h264_videotoolbox');
   assert.strictEqual(args[args.length - 1], '/x/out.mp4');
   assert.ok(args.includes('-b:v'));
-  engine.setVideoEncoder('videotoolbox');
-  const threaded = engine.phoneThreadArgs(['-y', '-i', 'in.mov', 'out.mp4']);
-  engine.setVideoEncoder('libx264');
-  assert.strictEqual(threaded.slice(0, 4).join(' '), '-filter_threads 1 -filter_complex_threads 1');
+});
+
+test('no GPL-only filter reaches the iPhone FFmpeg (eq, boxblur are swapped)', async () => {
+  const g = engine.lgplFilters('[a]scale=2:2,eq=saturation=1.15:contrast=1.05[b];[c]boxblur=20:2,eq=brightness=-0.08[d];[e]frequency=1[f]');
+  assert.ok(!/(^|[,;\]])(eq|boxblur)=/.test(g), g);
+  assert.ok(g.includes('lutyuv=') && g.includes('gblur=sigma='), g);
+  assert.ok(g.includes('frequency=1'), 'other filters untouched');
 });
 
 test('one clip: text, sticker, look, speed, music, vertical reframe', async () => {
@@ -172,6 +175,11 @@ test('a broken source gives a plain-language error', async () => {
   const results = await engine.exportClips({ clips: [{ id: 'x', name: 'Bad', sourcePath: path.join(work, 'missing.mov'), start: 0, end: 1 }], settings: {} }, paths, () => {});
   assert.strictEqual(results[0].ok, false);
   assert.ok(!/ffmpeg exited/.test(results[0].error), results[0].error);
+});
+
+test('every command sent to the phone used only LGPL filters', async () => {
+  const bad = calls.argsSeen.filter((a) => a.some((x, i) => a[i - 1] === '-filter_complex' && /(^|[,;\]])(eq|boxblur)=/.test(x)));
+  assert.strictEqual(bad.length, 0, `${bad.length} commands still use eq/boxblur`);
 });
 
 (async () => {

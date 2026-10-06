@@ -393,9 +393,9 @@
     try {
       const src = `${paths.tmp.replace(/\/$/, '')}/selftest-source.mov`;
       // Written with x264 settings and swapped to the phone's encoder, like every export.
-      const gen = await limit(nativeKit.run({ jobId: 'selftest-gen', args: engine.phoneThreadArgs(engine.phoneVideoArgs(['-y', '-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=30:duration=3',
+      const gen = await limit(nativeKit.run({ jobId: 'selftest-gen', args: engine.phoneVideoArgs(['-y', '-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=30:duration=3',
         '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
-        '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', src])) }), 'making the test video');
+        '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', src]) }), 'making the test video');
       step(`make test video: ${gen.returnCode}`);
       if (gen.returnCode !== 0) throw new Error('could not make the test video');
       const info = await limit(engine.probeMedia(src), 'reading the test video');
@@ -404,6 +404,7 @@
       const variants = [
         ['plain', {}],
         ['look', { look: { preset: 'gold' } }],
+        ['adjust', { look: { preset: 'cinematic', brightness: 0.05, contrast: 1.1, saturation: 1.2 } }],
         ['text', { texts: [{ text: "Self-test: 9ja's text", position: 'bottom', size: 7, style: 'box' }] }],
         ['sticker', { stickers: [{ key: 'fire', x: 100, y: 100, size: 120, start: 0, end: 2 }] }],
       ];
