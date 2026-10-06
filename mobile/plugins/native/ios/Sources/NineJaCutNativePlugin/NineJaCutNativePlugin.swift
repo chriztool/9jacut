@@ -28,6 +28,7 @@ public class NineJaCutNativePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "cancel", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "pickMedia", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "saveToPhotos", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "selfTestReport", returnType: CAPPluginReturnPromise),
     ]
 
     private let fileManager = FileManager.default
@@ -61,6 +62,22 @@ public class NineJaCutNativePlugin: CAPPlugin, CAPBridgedPlugin {
             // CI launches the app with this flag to run an export self-test.
             "selfTest": ProcessInfo.processInfo.arguments.contains("-NineJaCutSelfTest"),
         ])
+    }
+
+    /// CI only: the export self-test writes its progress here; the build
+    /// reads Documents/selftest-result.txt from the simulated iPhone.
+    @objc func selfTestReport(_ call: CAPPluginCall) {
+        let line = (call.getString("text") ?? "") + "\n"
+        print(line, terminator: "")
+        let url = documents.appendingPathComponent("selftest-result.txt")
+        if let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile()
+            handle.write(Data(line.utf8))
+            try? handle.close()
+        } else {
+            try? line.write(to: url, atomically: true, encoding: .utf8)
+        }
+        call.resolve()
     }
 
     // MARK: Files

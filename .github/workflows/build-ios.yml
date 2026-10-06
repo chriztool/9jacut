@@ -71,21 +71,23 @@ jobs:
         run: |
           xcrun simctl launch --console-pty --terminate-running-process "$DEVICE" com.ninejacut.app -NineJaCutSelfTest > selftest-log.txt 2>&1 &
           LAUNCH=$!
-          for i in $(seq 1 90); do
-            grep -q '9JACUT_SELFTEST' selftest-log.txt && break
+          sleep 5
+          DATA=$(xcrun simctl get_app_container "$DEVICE" com.ninejacut.app data)
+          RESULT="$DATA/Documents/selftest-result.txt"
+          for i in $(seq 1 120); do
+            grep -qE '9JACUT_SELFTEST (PASS|FAIL)' "$RESULT" 2>/dev/null && break
             sleep 2
           done
           kill $LAUNCH 2>/dev/null || true
           xcrun simctl terminate "$DEVICE" com.ninejacut.app || true
-          grep -iE 'error|9JACUT' selftest-log.txt | tail -40 || true
-          if ! grep -q '9JACUT_SELFTEST PASS' selftest-log.txt; then
-            # Put the end of the app's output in a build note (readable without the full log).
-            LINES=$(wc -l < selftest-log.txt | tr -d ' ')
-            TAIL=$(tail -30 selftest-log.txt | cut -c1-240 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
-            echo "::error title=Export self-test did not pass (${LINES} log lines)::${TAIL}"
+          cp "$RESULT" selftest-result.txt 2>/dev/null || echo "(no result file)" > selftest-result.txt
+          cat selftest-result.txt
+          if ! grep -q '9JACUT_SELFTEST PASS' selftest-result.txt; then
+            NOTE=$( (cat selftest-result.txt; echo '--- app output ---'; tail -15 selftest-log.txt) | cut -c1-240 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=Export self-test did not pass::${NOTE}"
             exit 1
           fi
-          echo "::notice::$(grep -o '9JACUT_SELFTEST.*' selftest-log.txt | head -1)"
+          echo "::notice title=Export self-test passed::$(grep -o '9JACUT_SELFTEST PASS.*' selftest-result.txt | head -1)"
 
       - name: Take a screenshot of the app
         if: always()
@@ -111,6 +113,7 @@ jobs:
             ios-simulator.png
             ios-app-log.txt
             selftest-log.txt
+            selftest-result.txt
             9jaCut-simulator.zip
           if-no-files-found: ignore
           retention-days: 14

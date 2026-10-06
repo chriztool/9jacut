@@ -6,7 +6,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 const listeners = [];
 ipcRenderer.on('ffmpegLog', (_e, data) => { for (const cb of listeners) cb(data); });
 const call = (method) => (opts) => ipcRenderer.invoke('native', method, opts);
-const methods = ['getPaths', 'pickMedia', 'writeTextFiles', 'writeBase64', 'removeFiles', 'resolveMedia', 'run', 'cancel', 'saveToPhotos'];
+const methods = ['getPaths', 'pickMedia', 'writeTextFiles', 'writeBase64', 'removeFiles', 'resolveMedia', 'run', 'cancel', 'saveToPhotos', 'selfTestReport'];
 
 contextBridge.exposeInMainWorld('Capacitor', {
   isNativePlatform: () => true,

@@ -413,7 +413,11 @@
     } catch (e) {
       report.steps.push(`error: ${e && e.message}`);
     }
-    console.log(`9JACUT_SELFTEST ${report.ok ? 'PASS' : 'FAIL'} ${JSON.stringify(report.steps)}`);
+    selfTestSay(`9JACUT_SELFTEST ${report.ok ? 'PASS' : 'FAIL'} ${JSON.stringify(report.steps)}`);
+  }
+  function selfTestSay(text) {
+    console.log(text);
+    if (nativeKit && nativeKit.selfTestReport) Promise.resolve(nativeKit.selfTestReport({ text })).catch(() => {});
   }
   if (isNative) {
     if (!nativeKit || !engine) {
@@ -421,8 +425,10 @@
     } else {
       nativePaths().then((p) => {
         if (!p.selfTest) return;
-        console.log('9JACUT_SELFTEST_START');
-        setTimeout(() => runSelfTest(p), 1500);
+        selfTestSay('9JACUT_SELFTEST_START');
+        window.addEventListener('error', (e) => selfTestSay(`9JACUT_PAGE_ERROR ${e.message} @ ${e.filename}:${e.lineno}`));
+        window.addEventListener('unhandledrejection', (e) => selfTestSay(`9JACUT_PAGE_ERROR ${e.reason && e.reason.message}`));
+        setTimeout(() => runSelfTest(p).catch((e) => selfTestSay(`9JACUT_SELFTEST FAIL crashed: ${e && e.message}`)), 1500);
       }).catch((e) => console.error(`9JACUT_NATIVE getPaths failed: ${e && e.message}`));
     }
   }

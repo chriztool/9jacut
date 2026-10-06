@@ -81,6 +81,7 @@ const native = {
   }),
   cancel: () => ({}),
   saveToPhotos: ({ paths }) => { record.photos.push(...paths); return { saved: paths.length }; },
+  selfTestReport: ({ text }) => { fs.appendFileSync(path.join(work, 'selftest-result.txt'), `${text}\n`); return {}; },
   share: ({ files }) => { record.shares.push(...files); return {}; },
 };
 ipcMain.handle('native', (_e, method, opts) => native[method](opts || {}));
@@ -174,11 +175,13 @@ async function run() {
   // The self-test the iOS build runs on the simulated iPhone, run here too.
   selfTestMode = true;
   const selfTestLines = [];
-  win.webContents.on('console-message', (_e, _level, message) => { if (message.startsWith('9JACUT_SELFTEST')) selfTestLines.push(message); });
+  win.webContents.on('console-message', (_e, _level, message) => { if (/^9JACUT_SELFTEST (PASS|FAIL)/.test(message)) selfTestLines.push(message); });
   await win.loadURL(`${url.pathToFileURL(path.join(root, 'www', 'index.html')).href}?phone=1`);
   await js('NineJaCutExport.setVideoEncoder("libx264")');
   for (let i = 0; i < 120 && !selfTestLines.length; i++) await sleep(250);
   check('the simulator self-test passes', /^9JACUT_SELFTEST PASS/.test(selfTestLines[0] || ''), selfTestLines[0] || 'no result');
+  const resultFile = fs.existsSync(path.join(work, 'selftest-result.txt')) ? fs.readFileSync(path.join(work, 'selftest-result.txt'), 'utf8') : '';
+  check('self-test writes its result through the native plugin', /9JACUT_SELFTEST_START/.test(resultFile) && /9JACUT_SELFTEST PASS/.test(resultFile), resultFile.trim().split('\n').pop());
 
   check('no errors in the page console', errors.filter((e) => !/Could not save to Photos/.test(e)).length === 0, errors.slice(0, 3).join(' | '));
   const shot = await win.webContents.capturePage();
