@@ -385,17 +385,22 @@
   // result and prints one line the build looks for. Never runs otherwise.
   async function runSelfTest(paths) {
     const report = { ok: false, steps: [] };
+    const step = (text) => { report.steps.push(text); selfTestSay(`9JACUT_STEP ${text}`); };
+    const limit = (promise, what, ms = 90000) => Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`${what} took longer than ${ms / 1000}s`)), ms)),
+    ]);
     try {
       const src = `${paths.tmp.replace(/\/$/, '')}/selftest-source.mov`;
       // Written with x264 settings and swapped to the phone's encoder, like every export.
-      const gen = await nativeKit.run({ jobId: 'selftest-gen', args: engine.phoneVideoArgs(['-y', '-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=30:duration=3',
+      const gen = await limit(nativeKit.run({ jobId: 'selftest-gen', args: engine.phoneVideoArgs(['-y', '-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=30:duration=3',
         '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
-        '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', src]) });
-      report.steps.push(`make test video: ${gen.returnCode}`);
+        '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', src]) }), 'making the test video');
+      step(`make test video: ${gen.returnCode}`);
       if (gen.returnCode !== 0) throw new Error('could not make the test video');
-      const info = await engine.probeMedia(src);
-      report.steps.push(`probe: ${info.width}x${info.height} ${info.duration}s audio=${info.hasAudio}`);
-      const results = await engine.exportClips({
+      const info = await limit(engine.probeMedia(src), 'reading the test video');
+      step(`probe: ${info.width}x${info.height} ${info.duration}s audio=${info.hasAudio}`);
+      const results = await limit(engine.exportClips({
         clips: [{
           id: 'selftest', name: 'selftest', sourcePath: src, start: 0.5, end: 2.5,
           look: { preset: 'gold' },
@@ -403,15 +408,15 @@
           stickers: [{ key: 'fire', x: 100, y: 100, size: 120, start: 0, end: 2 }],
         }],
         settings: { resolution: '720', quality: 'standard' },
-      }, paths, () => {});
+      }, paths, (d) => { if (d.status === 'error') step(`export error: ${d.message}`); }), 'exporting', 180000);
       const r = results[0];
-      report.steps.push(`export: ${r.ok ? 'ok' : r.error}`);
+      step(`export: ${r.ok ? 'ok' : r.error}`);
       if (!r.ok) throw new Error(r.error);
-      const out = await engine.probeMedia(r.outPath);
-      report.steps.push(`result: ${out.width}x${out.height} ${out.duration}s audio=${out.hasAudio}`);
+      const out = await limit(engine.probeMedia(r.outPath), 'reading the exported video');
+      step(`result: ${out.width}x${out.height} ${out.duration}s audio=${out.hasAudio}`);
       report.ok = out.width === 1280 && out.height === 720 && Math.abs(out.duration - 2) < 0.3 && out.hasAudio;
     } catch (e) {
-      report.steps.push(`error: ${e && e.message}`);
+      step(`error: ${e && e.message}`);
     }
     selfTestSay(`9JACUT_SELFTEST ${report.ok ? 'PASS' : 'FAIL'} ${JSON.stringify(report.steps)}`);
   }

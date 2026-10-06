@@ -74,7 +74,7 @@ jobs:
           sleep 5
           DATA=$(xcrun simctl get_app_container "$DEVICE" com.ninejacut.app data)
           RESULT="$DATA/Documents/selftest-result.txt"
-          for i in $(seq 1 120); do
+          for i in $(seq 1 200); do
             grep -qE '9JACUT_SELFTEST (PASS|FAIL)' "$RESULT" 2>/dev/null && break
             sleep 2
           done
@@ -83,7 +83,7 @@ jobs:
           cp "$RESULT" selftest-result.txt 2>/dev/null || echo "(no result file)" > selftest-result.txt
           cat selftest-result.txt
           if ! grep -q '9JACUT_SELFTEST PASS' selftest-result.txt; then
-            NOTE=$( (cat selftest-result.txt; echo '--- app output ---'; tail -15 selftest-log.txt) | cut -c1-240 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            NOTE=$( (cat selftest-result.txt; echo '--- app output ---'; grep -vE 'DiskCookieStorage' selftest-log.txt | tail -40) | cut -c1-240 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
             echo "::error title=Export self-test did not pass::${NOTE}"
             exit 1
           fi
