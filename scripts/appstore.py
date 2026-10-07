@@ -99,7 +99,7 @@ state = {}
 def find_version():
     vs = call('GET', f'/v1/apps/{APP}/appStoreVersions?filter[platform]=IOS&limit=20')['data']
     editable = [v for v in vs if v['attributes']['appStoreState'] in (
-        'PREPARE_FOR_SUBMISSION', 'DEVELOPER_REJECTED', 'REJECTED', 'METADATA_REJECTED', 'INVALID_BINARY', 'WAITING_FOR_REVIEW', 'IN_REVIEW', 'READY_FOR_REVIEW')]
+        'PREPARE_FOR_SUBMISSION', 'DEVELOPER_REJECTED', 'REJECTED', 'METADATA_REJECTED', 'INVALID_BINARY', 'WAITING_FOR_REVIEW', 'IN_REVIEW', 'READY_FOR_REVIEW', 'UNRESOLVED_ISSUES', 'DEVELOPER_ACTION_NEEDED')]
     if not editable:
         raise ApiError('no editable iOS version: ' + ', '.join(f"{v['attributes']['versionString']}={v['attributes']['appStoreState']}" for v in vs))
     v = editable[0]
@@ -342,6 +342,11 @@ def submit():
 
 if not step('find the iOS version', find_version):
     sys.exit(1)
+if META.get('only') == 'review':
+    # Only the App Review contact and notes (e.g. answering an App Review message).
+    ok = step('App Review contact and notes', review_details)
+    print(f"::{'notice' if ok else 'error'} title=Summary::{' || '.join(log + problems)[:3800]}", flush=True)
+    sys.exit(0 if ok else 1)
 if state['versionState'] in ('WAITING_FOR_REVIEW', 'IN_REVIEW'):
     note('This version is already with App Review; nothing to change.')
     sys.exit(0)
