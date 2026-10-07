@@ -342,6 +342,16 @@ def submit():
 
 if not step('find the iOS version', find_version):
     sys.exit(1)
+if META.get('only') == 'status':
+    # Read-only: where the app stands with App Review.
+    subs = call('GET', f'/v1/reviewSubmissions?filter[app]={APP}&filter[platform]=IOS&limit=10')['data']
+    note('Review submissions: ' + ', '.join(f"{x['attributes']['state']} (submitted {x['attributes'].get('submittedDate')})" for x in subs))
+    v = call('GET', f"/v1/appStoreVersions/{state['version']}?include=build")
+    note(f"Version {v['data']['attributes']['versionString']}: {v['data']['attributes']['appStoreState']}")
+    rd = call('GET', f"/v1/appStoreVersions/{state['version']}/appStoreReviewDetail")['data']['attributes']
+    note(f"Review contact set: {bool(rd.get('contactPhone'))}, notes {len(rd.get('notes') or '')} chars")
+    print(f"::notice title=Summary::{' || '.join(log)[:3800]}", flush=True)
+    sys.exit(0)
 if META.get('only') == 'review':
     # Only the App Review contact and notes (e.g. answering an App Review message).
     ok = step('App Review contact and notes', review_details)
