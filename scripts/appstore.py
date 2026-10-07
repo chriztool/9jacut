@@ -342,6 +342,24 @@ def submit():
 
 if not step('find the iOS version', find_version):
     sys.exit(1)
+if META.get('only') == 'resubmit':
+    # Send a submission with unresolved issues (after replying to App Review) back to review.
+    subs = call('GET', f'/v1/reviewSubmissions?filter[app]={APP}&filter[platform]=IOS&limit=10')['data']
+    open_sub = next((x for x in subs if x['attributes']['state'] == 'UNRESOLVED_ISSUES'), None)
+    if not open_sub:
+        note('Nothing to resubmit: ' + ', '.join(x['attributes']['state'] for x in subs))
+    else:
+        items = call('GET', f"/v1/reviewSubmissions/{open_sub['id']}/items")['data']
+        note('Items: ' + ', '.join(i['attributes'].get('state', '?') for i in items))
+        try:
+            call('PATCH', f"/v1/reviewSubmissions/{open_sub['id']}", {'data': {'type': 'reviewSubmissions', 'id': open_sub['id'], 'attributes': {'submitted': True}}})
+            note('RESUBMITTED to App Review')
+        except ApiError as e:
+            warn(f'resubmit: {e}')
+    subs = call('GET', f'/v1/reviewSubmissions?filter[app]={APP}&filter[platform]=IOS&limit=10')['data']
+    note('Now: ' + ', '.join(x['attributes']['state'] for x in subs))
+    print(f"::notice title=Summary::{' || '.join(log + problems)[:3800]}", flush=True)
+    sys.exit(1 if problems else 0)
 if META.get('only') == 'status':
     # Read-only: where the app stands with App Review.
     subs = call('GET', f'/v1/reviewSubmissions?filter[app]={APP}&filter[platform]=IOS&limit=10')['data']
