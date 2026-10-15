@@ -360,6 +360,58 @@ if META.get('only') == 'resubmit':
     note('Now: ' + ', '.join(x['attributes']['state'] for x in subs))
     print(f"::notice title=Summary::{' || '.join(log + problems)[:3800]}", flush=True)
     sys.exit(1 if problems else 0)
+def crash_summary(text):
+    """The useful part of a crash log: why it died and the crashed thread."""
+    out = []
+    try:  # .ips (JSON header line + JSON body)
+        head, body = text.split('\n', 1)
+        b = json.loads(body)
+        exc = b.get('exception', {})
+        out.append(f"{exc.get('type')} {exc.get('signal')} {exc.get('subtype', '')} | {b.get('termination', {}).get('indicator', '')} {b.get('termination', {}).get('reasons', '')}")
+        if b.get('asi'):
+            out.append(f"ASI: {b['asi']}")
+        imgs = b.get('usedImages', [])
+        for th in b.get('threads', []):
+            if th.get('triggered'):
+                for fr in th.get('frames', [])[:30]:
+                    i = fr.get('imageIndex', -1)
+                    img = imgs[i].get('name', '?') if 0 <= i < len(imgs) else '?'
+                    out.append(f"  {img} {fr.get('symbol', hex(fr.get('imageOffset', 0)))}+{fr.get('symbolLocation', '')}")
+        return out
+    except Exception:
+        pass
+    lines = text.splitlines()
+    for l in lines:
+        if re.match(r'(Hardware Model|OS Version|Exception Type|Exception Subtype|Exception Codes|Exception Reason|Termination Reason|Triggered by Thread|Crashed Thread|Application Specific Information)', l):
+            out.append(l.strip())
+    grab = False
+    for idx, l in enumerate(lines):
+        if re.match(r'Last Exception Backtrace|Thread \d+ Crashed', l):
+            out.append(l.strip())
+            out.extend(x.strip() for x in lines[idx + 1: idx + 30] if x.strip())
+    return out
+
+
+if META.get('only') == 'crashes':
+    # Read-only: TestFlight crash reports with their logs.
+    subs = call('GET', f'/v1/apps/{APP}/betaFeedbackCrashSubmissions?limit=20&include=build')
+    builds = {b['id']: b['attributes'].get('version') for b in subs.get('included', []) if b['type'] == 'builds'}
+    note(f"{len(subs['data'])} TestFlight crash report(s)")
+    for s in subs['data']:
+        a = s['attributes']
+        bid = (s.get('relationships', {}).get('build', {}).get('data') or {}).get('id')
+        hdr = f"Build {builds.get(bid, '?')} | {a.get('createdDate')} | {a.get('deviceModel')} iOS {a.get('osVersion')} | comment: {a.get('comment')!r}"
+        try:
+            log_text = call('GET', f"/v1/betaFeedbackCrashSubmissions/{s['id']}/crashLog")['data']['attributes'].get('logText') or ''
+        except ApiError as e:
+            log_text = ''
+            hdr += f' | log: {e}'
+        summ = crash_summary(log_text) if log_text else ['(no log)']
+        body = hdr + '%0A' + '%0A'.join(x.replace('%', '%25') for x in summ)
+        print(f'::warning title=Crash::{body[:3900]}', flush=True)
+        os.makedirs('crash-logs', exist_ok=True)
+        open(f"crash-logs/{s['id']}.txt", 'w').write(hdr + '\n\n' + log_text)
+    sys.exit(0)
 if META.get('only') == 'status':
     # Read-only: where the app stands with App Review.
     subs = call('GET', f'/v1/reviewSubmissions?filter[app]={APP}&filter[platform]=IOS&limit=10')['data']
