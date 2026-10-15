@@ -412,6 +412,38 @@ if META.get('only') == 'crashes':
         os.makedirs('crash-logs', exist_ok=True)
         open(f"crash-logs/{s['id']}.txt", 'w').write(hdr + '\n\n' + log_text)
     sys.exit(0)
+if META.get('only') == 'swap':
+    # Put the newest build in place of the one waiting for review: wait for it
+    # to finish processing (before giving up our place), take the version out
+    # of review, attach the build and submit again.
+    def swap():
+        b = newest_build(True)
+        current = call('GET', f"/v1/appStoreVersions/{state['version']}/build")['data']
+        if current and current['id'] == b['id']:
+            note(f"Build {b['attributes']['version']} is already the one in review")
+            return
+        note(f"Swapping build {current['attributes']['version'] if current else 'none'} for {b['attributes']['version']}")
+        subs = call('GET', f'/v1/reviewSubmissions?filter[app]={APP}&filter[platform]=IOS&limit=20')['data']
+        for s in subs:
+            if s['attributes']['state'] in ('WAITING_FOR_REVIEW', 'IN_REVIEW', 'UNRESOLVED_ISSUES'):
+                call('PATCH', f"/v1/reviewSubmissions/{s['id']}", {'data': {'type': 'reviewSubmissions', 'id': s['id'], 'attributes': {'canceled': True}}})
+                note(f"Took submission {s['id']} ({s['attributes']['state']}) out of review")
+        for _ in range(40):
+            v = call('GET', f"/v1/appStoreVersions/{state['version']}")['data']['attributes']['appStoreState']
+            subs = call('GET', f'/v1/reviewSubmissions?filter[app]={APP}&filter[platform]=IOS&limit=20')['data']
+            busy = [s['attributes']['state'] for s in subs if s['attributes']['state'] in ('WAITING_FOR_REVIEW', 'IN_REVIEW', 'CANCELING', 'UNRESOLVED_ISSUES')]
+            if v not in ('WAITING_FOR_REVIEW', 'IN_REVIEW') and not busy:
+                break
+            print(f'version {v}, submissions {busy}; waiting', flush=True)
+            time.sleep(30)
+        note(f'Version is now {v}')
+        attach_build(False)
+        submit()
+    ok = step('swap in the newest build and resubmit', swap)
+    subs = call('GET', f'/v1/reviewSubmissions?filter[app]={APP}&filter[platform]=IOS&limit=5')['data']
+    note('Submissions now: ' + ', '.join(x['attributes']['state'] for x in subs))
+    print(f"::{'notice' if ok else 'error'} title=Summary::{' || '.join(log + problems)[:3800]}", flush=True)
+    sys.exit(0 if ok else 1)
 if META.get('only') == 'status':
     # Read-only: where the app stands with App Review.
     subs = call('GET', f'/v1/reviewSubmissions?filter[app]={APP}&filter[platform]=IOS&limit=10')['data']
