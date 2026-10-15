@@ -147,10 +147,18 @@ public class NineJaCutNativePlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         // ffmpeg logs come in many tiny pieces; send them to the page a few
-        // times a second instead of one event each.
+        // times a second instead of one event each. Events go out on the main
+        // thread (Capacitor's listener list is not safe to read from ffmpeg's
+        // worker threads).
         let buffer = LogBuffer { [weak self] text in
-            self?.notifyListeners("ffmpegLog", data: ["jobId": jobId, "text": text])
+            DispatchQueue.main.async {
+                self?.notifyListeners("ffmpegLog", data: ["jobId": jobId, "text": text])
+            }
         }
+
+        // If the person switches apps mid-export, ask iOS for time to finish
+        // instead of being frozen in the middle of writing the file.
+        let background = BackgroundTime(name: "9jaCut export")
 
         let session = FFmpegKit.executeWithArgumentsAsync(
             args,
@@ -158,14 +166,19 @@ public class NineJaCutNativePlugin: CAPPlugin, CAPBridgedPlugin {
                 buffer.flush()
                 self?.forget(jobId)
                 let code = session.getReturnCode()?.getValue() ?? 1
-                call.resolve(["returnCode": Int(code)])
+                DispatchQueue.main.async {
+                    call.resolve(["returnCode": Int(code)])
+                    background.end()
+                }
             },
             withLogCallback: { log in
+                // Info and more important only (ffmpeg's own default).
+                guard (log.getLevel() & 0xff) <= 32 else { return }
                 buffer.append(log.getMessage())
             },
             withStatisticsCallback: { stats in
                 // The export code reads progress from "time=" in the log.
-                buffer.append(String(format: "\ntime=%@\n", Self.clock(stats.getTime() / 1000)))
+                buffer.append("\ntime=\(Self.clock(stats.getTime() / 1000))\n")
             }
         )
         sessionsLock.lock()
@@ -190,7 +203,7 @@ public class NineJaCutNativePlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private static func clock(_ seconds: Double) -> String {
-        let s = max(0, seconds)
+        let s = seconds.isFinite ? min(max(0, seconds), 359_999) : 0
         return String(format: "%02d:%02d:%05.2f", Int(s) / 3600, (Int(s) % 3600) / 60, s.truncatingRemainder(dividingBy: 60))
     }
 
@@ -316,6 +329,35 @@ private final class LogBuffer {
         lock.unlock()
         if !text.isEmpty { send(text) }
     }
+}
+
+/// Extra time from iOS to finish work if the app goes to the background.
+/// end() is safe to call more than once and from any thread.
+private final class BackgroundTime {
+    private let lock = NSLock()
+    private var id: UIBackgroundTaskIdentifier = .invalid
+
+    init(name: String) {
+        let started = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+            // Out of time: give it back so iOS does not end the app.
+            self?.end()
+        }
+        lock.lock()
+        id = started
+        lock.unlock()
+    }
+
+    func end() {
+        lock.lock()
+        let current = id
+        id = .invalid
+        lock.unlock()
+        if current != .invalid {
+            UIApplication.shared.endBackgroundTask(current)
+        }
+    }
+
+    deinit { end() }
 }
 
 private func describe(_ path: String, _ name: String, _ mime: String) -> JSObject {
