@@ -452,6 +452,8 @@ if META.get('only') == 'status':
     note(f"Version {v['data']['attributes']['versionString']}: {v['data']['attributes']['appStoreState']}")
     rd = call('GET', f"/v1/appStoreVersions/{state['version']}/appStoreReviewDetail")['data']['attributes']
     note(f"Review contact set: {bool(rd.get('contactPhone'))}, notes {len(rd.get('notes') or '')} chars")
+    b = call('GET', f"/v1/appStoreVersions/{state['version']}/build")['data']
+    note(f"Build in review: {b['attributes']['version'] if b else 'none'} ({b['attributes']['processingState'] if b else '-'})")
     print(f"::notice title=Summary::{' || '.join(log)[:3800]}", flush=True)
     sys.exit(0)
 if META.get('only') == 'review':
