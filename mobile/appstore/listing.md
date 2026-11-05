@@ -1,7 +1,7 @@
 # App Store listing (9jaCut 2.0.0)
 
 - **Name:** 9jaCut
-- **Subtitle (30 max):** Free video editor, made in 9ja
+- **Subtitle (30 max):** Video editor made in 9ja (no price words: Guideline 2.3.7)
 - **Category:** Photo & Video (secondary: Business)
 - **Price:** Free · **Age rating:** 4+
 - **Copyright:** 2026 Christian Agbugba
