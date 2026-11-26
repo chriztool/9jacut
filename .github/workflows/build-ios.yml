@@ -17,6 +17,7 @@ on:
     # App Store listing changes don't change the app.
     paths-ignore:
       - 'mobile/appstore/**'
+      - 'mobile/branding/**'
       - 'scripts/appstore.py'
       - '.github/workflows/appstore.yml'
   workflow_dispatch:
