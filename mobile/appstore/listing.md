@@ -59,3 +59,5 @@ Questions or ideas? Email ogemdichris@yahoo.com.
 To try it: tap Media > Import videos and pick any video from Photos. It goes onto the timeline. Swipe in from the right edge of the screen to open the editing tools (Text, Stickers, Effects, Transitions, Filters, Adjust, Templates). Tap Export (top right) to render the video; it is saved to Photos and the share sheet opens.
 Promo videos: Menu > Promo Video, fill in a business name, add a photo, pick a style and export.
 Video rendering uses an LGPL build of FFmpeg with Apple's hardware H.264 encoder.
+
+- Screenshots: no price words either ("free", "0ff"): Guideline 2.3.7, Nov 2026.
