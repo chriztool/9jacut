@@ -60,4 +60,4 @@ To try it: tap Media > Import videos and pick any video from Photos. It goes ont
 Promo videos: Menu > Promo Video, fill in a business name, add a photo, pick a style and export.
 Video rendering uses an LGPL build of FFmpeg with Apple's hardware H.264 encoder.
 
-- Screenshots: no price words either ("free", "0ff"): Guideline 2.3.7, Nov 2026.
+- Screenshots: no price words either ("free", "0ff"): Guideline 2.3.7 (Nov 2026).
