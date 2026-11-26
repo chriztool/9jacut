@@ -239,7 +239,7 @@ def availability():
                 if ta['attributes'].get('available') != want:
                     call('PATCH', f"/v1/territoryAvailabilities/{ta['id']}", {'data': {'type': 'territoryAvailabilities', 'id': ta['id'], 'attributes': {'available': want}}})
             url = r.get('links', {}).get('next')
-    note(f'Available in {len([t for t in terrs if t not in exclude])} countries (EU left out until trader status is set)')
+    note(f'Available in {len([t for t in terrs if t not in exclude])} countries (EU left out until trader status is set; China mainland left out: needs a security assessment)')
 
 
 def screenshots():
@@ -456,6 +456,12 @@ if META.get('only') == 'status':
     note(f"Build in review: {b['attributes']['version'] if b else 'none'} ({b['attributes']['processingState'] if b else '-'})")
     print(f"::notice title=Summary::{' || '.join(log)[:3800]}", flush=True)
     sys.exit(0)
+if META.get('only') == 'availability':
+    # Only the countries (e.g. leaving out China mainland, which needs a security
+    # assessment and an AI-content declaration before any app can be reviewed).
+    ok = step('countries', availability)
+    print(f"::{'notice' if ok else 'error'} title=Summary::{' || '.join(log + problems)[:3800]}", flush=True)
+    sys.exit(0 if ok else 1)
 if META.get('only') == 'screenshots':
     # Only replace the screenshots (e.g. after App Review flagged one).
     def find_loc():
