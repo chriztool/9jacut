@@ -22,7 +22,7 @@ SHOTS = [
     ('raw-4-text.png', 'Titles in one tap', 'Bold styles for TikTok, Reels and Status'),
     ('raw-5-transitions.png', 'Smooth transitions', 'Crossfade, slide, wipe, circle open…'),
     ('raw-6-promo.png', 'Business promo videos', '52 styles. Add your photos and go'),
-    ('raw-7-export.png', 'Free. No watermark.', 'Export up to 4K straight to Photos'),
+    ('raw-7-export.png', 'No watermark. Ever.', 'Export up to 4K straight to Photos'),
 ]
 
 W, H = 1320, 2868

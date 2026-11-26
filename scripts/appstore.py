@@ -456,6 +456,15 @@ if META.get('only') == 'status':
     note(f"Build in review: {b['attributes']['version'] if b else 'none'} ({b['attributes']['processingState'] if b else '-'})")
     print(f"::notice title=Summary::{' || '.join(log)[:3800]}", flush=True)
     sys.exit(0)
+if META.get('only') == 'screenshots':
+    # Only replace the screenshots (e.g. after App Review flagged one).
+    def find_loc():
+        locs = call('GET', f"/v1/appStoreVersions/{state['version']}/appStoreVersionLocalizations")['data']
+        loc = next((l for l in locs if l['attributes']['locale'] == META.get('locale', 'en-US')), locs[0])
+        state['versionLoc'] = loc['id']
+    ok = step('find the listing language', find_loc) and step('screenshots', screenshots)
+    print(f"::{'notice' if ok else 'error'} title=Summary::{' || '.join(log + problems)[:3800]}", flush=True)
+    sys.exit(0 if ok else 1)
 if META.get('only') == 'review':
     # Only the App Review contact and notes (e.g. answering an App Review message).
     ok = step('App Review contact and notes', review_details)
